@@ -350,3 +350,40 @@ def dig_tracks(
 def invalidate():
     invalidate_cache()
     return {"status": "ok"}
+
+
+# ── Temporary seed endpoint (remove after migration) ──────────────────────────
+import os as _os
+from typing import List
+
+class TrackSeed(BaseModel):
+    id: int
+    title: Optional[str] = None
+    artist: Optional[str] = None
+    bpm: Optional[float] = None
+    camelot_code: Optional[str] = None
+    energy: Optional[float] = None
+    duration: Optional[float] = None
+    source_url: Optional[str] = None
+    danceability: Optional[float] = None
+    valence: Optional[float] = None
+    intro_bars: Optional[int] = None
+    outro_bars: Optional[int] = None
+    has_clean_intro: Optional[bool] = None
+    has_clean_outro: Optional[bool] = None
+
+@router.post("/admin/seed-tracks")
+def seed_tracks(tracks: List[TrackSeed], secret: str, db: Session = Depends(get_db)):
+    if secret != _os.getenv("SEED_SECRET", ""):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    inserted = 0
+    for t in tracks:
+        existing = db.query(Track).filter(Track.id == t.id).first()
+        if not existing:
+            db.add(Track(**t.model_dump(exclude_none=True)))
+            inserted += 1
+        else:
+            for k, v in t.model_dump(exclude_none=True).items():
+                setattr(existing, k, v)
+    db.commit()
+    return {"inserted": inserted, "total": len(tracks)}

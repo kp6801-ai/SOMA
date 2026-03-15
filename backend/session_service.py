@@ -164,7 +164,7 @@ def next_track(db: DBSession, session_id: int) -> dict:
         "camelot": track.camelot_code,
         "energy": track.energy,
         "duration": track.duration,
-        "audio_url": getattr(track, "audio_url", None),
+        "audio_url": getattr(track, "source_url", None),
     }
 
 
