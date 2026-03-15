@@ -353,9 +353,6 @@ def invalidate():
 
 
 # ── Temporary seed endpoint (remove after migration) ──────────────────────────
-import os as _os
-from typing import List
-
 class TrackSeed(BaseModel):
     id: int
     title: Optional[str] = None
@@ -372,12 +369,17 @@ class TrackSeed(BaseModel):
     has_clean_intro: Optional[bool] = None
     has_clean_outro: Optional[bool] = None
 
+class SeedRequest(BaseModel):
+    secret: str
+    tracks: list[TrackSeed]
+
 @router.post("/admin/seed-tracks")
-def seed_tracks(tracks: List[TrackSeed], secret: str, db: Session = Depends(get_db)):
-    if secret != _os.getenv("SEED_SECRET", ""):
+def seed_tracks(data: SeedRequest, db: Session = Depends(get_db)):
+    import os
+    if data.secret != os.getenv("SEED_SECRET", ""):
         raise HTTPException(status_code=403, detail="Forbidden")
     inserted = 0
-    for t in tracks:
+    for t in data.tracks:
         existing = db.query(Track).filter(Track.id == t.id).first()
         if not existing:
             db.add(Track(**t.model_dump(exclude_none=True)))
@@ -386,4 +388,4 @@ def seed_tracks(tracks: List[TrackSeed], secret: str, db: Session = Depends(get_
             for k, v in t.model_dump(exclude_none=True).items():
                 setattr(existing, k, v)
     db.commit()
-    return {"inserted": inserted, "total": len(tracks)}
+    return {"inserted": inserted, "total": len(data.tracks)}
