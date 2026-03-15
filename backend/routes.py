@@ -65,8 +65,8 @@ def create_session(req: SessionCreateRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="duration_min must be between 5 and 480")
     try:
         result = session_service.create_session(db, req.arc_type, req.duration_min)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return result
 
 
@@ -352,40 +352,3 @@ def invalidate():
     return {"status": "ok"}
 
 
-# ── Temporary seed endpoint (remove after migration) ──────────────────────────
-class TrackSeed(BaseModel):
-    id: int
-    title: Optional[str] = None
-    artist: Optional[str] = None
-    bpm: Optional[float] = None
-    camelot_code: Optional[str] = None
-    energy: Optional[float] = None
-    duration: Optional[float] = None
-    source_url: Optional[str] = None
-    danceability: Optional[float] = None
-    valence: Optional[float] = None
-    intro_bars: Optional[int] = None
-    outro_bars: Optional[int] = None
-    has_clean_intro: Optional[bool] = None
-    has_clean_outro: Optional[bool] = None
-
-class SeedRequest(BaseModel):
-    secret: str
-    tracks: list[TrackSeed]
-
-@router.post("/admin/seed-tracks")
-def seed_tracks(data: SeedRequest, db: Session = Depends(get_db)):
-    import os
-    if data.secret != os.getenv("SEED_SECRET", ""):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    inserted = 0
-    for t in data.tracks:
-        existing = db.query(Track).filter(Track.id == t.id).first()
-        if not existing:
-            db.add(Track(**t.model_dump(exclude_none=True)))
-            inserted += 1
-        else:
-            for k, v in t.model_dump(exclude_none=True).items():
-                setattr(existing, k, v)
-    db.commit()
-    return {"inserted": inserted, "total": len(data.tracks)}
