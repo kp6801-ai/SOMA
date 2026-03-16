@@ -2,6 +2,8 @@
 # Essentia, librosa, numba etc. are local-only for track analysis
 
 annotated-types==0.7.0
+slowapi==0.1.9
+limits==3.14.1
 anyio==4.12.1
 certifi==2026.2.25
 charset-normalizer==3.4.5

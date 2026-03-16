@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from database import get_db, Track
 from camelot import get_camelot, compatible_keys
@@ -14,6 +16,8 @@ from typing import Optional
 import tempfile
 import shutil
 import os
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
@@ -59,7 +63,8 @@ def get_arc_types():
 
 
 @router.post("/sessions")
-def create_session(req: SessionCreateRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def create_session(request: Request, req: SessionCreateRequest, db: Session = Depends(get_db)):
     """Create a new session. Plans the full arc and picks all tracks upfront."""
     if req.duration_min < 5 or req.duration_min > 480:
         raise HTTPException(status_code=400, detail="duration_min must be between 5 and 480")
@@ -188,12 +193,21 @@ def get_similar(track_id: int, limit: int = 5,
     return result
 
 @router.post("/tracks/upload")
+@limiter.limit("5/minute")
 async def upload_track(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     if not file.filename.lower().endswith(".mp3"):
         raise HTTPException(status_code=400, detail="Only MP3 files are supported")
+
+    # Reject files over 50 MB
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 50 MB.")
+    file.file.seek(0)  # reset for later reads
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         shutil.copyfileobj(file.file, tmp)

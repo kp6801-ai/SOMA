@@ -153,6 +153,9 @@ export default function SomaDashboard() {
             <div>
               <p className="label-dim mb-4">Session Type</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 stagger">
+                {arcTypes.length === 0 && !error && Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="skeleton" style={{ height: 110, borderRadius: 20 }} />
+                ))}
                 {arcTypes.map(arc => {
                   const color  = ARC_ACCENT[arc.key] || '#e8305a'
                   const active = selectedArc === arc.key
