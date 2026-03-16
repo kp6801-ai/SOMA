@@ -10,7 +10,6 @@ import SessionQueue from '@/components/SessionQueue'
 
 type View = 'home' | 'session'
 
-// Normalised BPM shape for each arc type (10 points, 0–1)
 const ARC_SHAPES: Record<string, number[]> = {
   peak_hour:  [0.35, 0.48, 0.62, 0.75, 0.88, 0.97, 1.00, 1.00, 1.00, 0.92],
   workout:    [0.25, 0.45, 0.70, 0.90, 1.00, 1.00, 0.90, 0.75, 0.55, 0.35],
@@ -31,23 +30,77 @@ const ARC_ACCENT: Record<string, string> = {
   hiit:       '#ffaa22',
 }
 
+/* ── Hero arc: full-width waveform for selected arc ── */
+function HeroArc({ arcKey, color }: { arcKey: string; color: string }) {
+  const pts = ARC_SHAPES[arcKey] || Array(10).fill(0.5)
+  const W = 400; const H = 52
+  const points = pts.map((v, i) =>
+    `${(i / (pts.length - 1)) * W},${H - v * (H - 8) - 4}`
+  ).join(' ')
+  return (
+    <svg
+      width="100%" height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      style={{ display: 'block', overflow: 'visible' }}
+    >
+      <defs>
+        <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor={color} stopOpacity="0.3" />
+          <stop offset="50%"  stopColor={color} stopOpacity="1"   />
+          <stop offset="100%" stopColor={color} stopOpacity="0.3" />
+        </linearGradient>
+        <filter id="heroGlow">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <polyline
+        points={points}
+        fill="none"
+        stroke="url(#heroGrad)"
+        strokeWidth={2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        filter="url(#heroGlow)"
+        className="draw-wave"
+      />
+    </svg>
+  )
+}
+
+/* ── Mini arc for arc cards ── */
 function MiniArc({ arcKey, color, active }: { arcKey: string; color: string; active: boolean }) {
   const pts = ARC_SHAPES[arcKey] || Array(10).fill(0.5)
-  const W = 76; const H = 26
+  const W = 60; const H = 22
   const points = pts.map((v, i) =>
     `${(i / (pts.length - 1)) * W},${H - v * (H - 4) - 2}`
   ).join(' ')
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible', display: 'block' }}>
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible', display: 'block', flexShrink: 0 }}>
       <polyline
         points={points}
         fill="none"
-        stroke={active ? color : 'rgba(255,255,255,0.18)'}
+        stroke={active ? color : 'rgba(255,255,255,0.16)'}
         strokeWidth={active ? 1.5 : 1}
         strokeLinejoin="round"
         strokeLinecap="round"
         style={{ transition: 'stroke 0.3s ease' }}
       />
+    </svg>
+  )
+}
+
+/* ── SVG star icon ── */
+function StarIcon({ filled, color }: { filled: boolean; color: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24"
+      fill={filled ? color : 'none'}
+      stroke={filled ? color : 'rgba(255,255,255,0.22)'}
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    >
+      <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
     </svg>
   )
 }
@@ -63,6 +116,7 @@ export default function SomaDashboard() {
   const [scanning, setScanning]       = useState(false)
   const [done, setDone]               = useState(false)
   const [error, setError]             = useState<string | null>(null)
+  const [hoverRating, setHoverRating] = useState(0)
 
   useEffect(() => {
     api.getArcTypes()
@@ -78,7 +132,7 @@ export default function SomaDashboard() {
       const s = await api.createSession(selectedArc, duration)
       setSession(s); setDone(false); setView('session')
       await loadNextTrack(s.session_id)
-    } catch (e) {
+    } catch {
       setError('Failed to create session. Make sure the backend is running and the database has tracks.')
     } finally { setLoading(false) }
   }
@@ -86,6 +140,7 @@ export default function SomaDashboard() {
   const loadNextTrack = useCallback(async (sessionId: number) => {
     setScanning(true)
     setError(null)
+    setHoverRating(0)
     try {
       const next = await api.nextTrack(sessionId)
       if (next.done) { setDone(true); setNowPlaying(null) }
@@ -104,36 +159,39 @@ export default function SomaDashboard() {
   }
 
   const currentPosition = nowPlaying?.position ?? 0
-  const homeAccent    = ARC_ACCENT[selectedArc]             || '#e8305a'
-  const sessionAccent = ARC_ACCENT[session?.arc_type || ''] || '#e8305a'
+  const homeAccent      = ARC_ACCENT[selectedArc]             || '#e8305a'
+  const sessionAccent   = ARC_ACCENT[session?.arc_type || ''] || '#e8305a'
+  const totalTracks     = session?.total_tracks ?? 0
+  const progressPct     = totalTracks > 0 ? (currentPosition / totalTracks) * 100 : 0
 
-  /* ─── HOME ──────────────────────────────────────── */
+  /* ─── HOME ──────────────────────────────────────────────── */
   if (view === 'home') {
     return (
       <div className="relative min-h-screen z-10 flex flex-col">
-        {/* Ambient orbs */}
         <div className="orb orb-pink" />
         <div className="orb orb-teal" />
         <div className="orb orb-blue" />
 
-        <div className="flex-1 flex flex-col items-center justify-center px-5 py-16 w-full max-w-xl mx-auto">
-
+        <div
+          className="flex-1 flex flex-col items-center justify-center"
+          style={{ padding: '60px 20px', width: '100%', maxWidth: 500, margin: '0 auto' }}
+        >
           {/* Wordmark */}
-          <div className="mb-14 text-center fade-up" style={{ animationDelay: '0ms' }}>
+          <div className="text-center fade-up" style={{ marginBottom: 36 }}>
             <h1
               className="heading-hero"
               style={{
-                fontSize: 'clamp(3.5rem, 12vw, 5.5rem)',
-                background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.88) 60%)`,
+                fontSize: 'clamp(4rem, 14vw, 6.5rem)',
+                background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 58%)`,
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
-                transition: 'background 0.6s ease',
+                transition: 'background 0.5s ease',
               }}
             >
               SOMA
             </h1>
-            <p className="label-dim mt-3" style={{ letterSpacing: '0.3em' }}>
+            <p className="label-dim" style={{ marginTop: 10, letterSpacing: '0.32em' }}>
               Generative DJ Intelligence
             </p>
           </div>
@@ -141,20 +199,28 @@ export default function SomaDashboard() {
           {/* Error banner */}
           {error && (
             <div
-              className="w-full glass-card mb-6 fade-up"
-              style={{ padding: '14px 18px', borderColor: 'rgba(232,48,90,0.35)', boxShadow: '0 0 24px rgba(232,48,90,0.1)' }}
+              className="w-full glass-card fade-up"
+              style={{ padding: '14px 18px', borderColor: 'rgba(232,48,90,0.35)', marginBottom: 20 }}
             >
-              <p style={{ fontSize: 12, color: '#e8305a', lineHeight: 1.5 }}>{error}</p>
+              <p style={{ fontSize: 12, color: '#e8305a', lineHeight: 1.55 }}>{error}</p>
             </div>
           )}
 
-          {/* Arc type grid */}
-          <div className="w-full space-y-7">
+          {/* Hero arc visualization for selected arc */}
+          {selectedArc && !error && (
+            <div className="w-full fade-up" style={{ marginBottom: 28, animationDelay: '30ms' }}>
+              <HeroArc key={selectedArc} arcKey={selectedArc} color={homeAccent} />
+            </div>
+          )}
+
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+            {/* Arc type list */}
             <div>
-              <p className="label-dim mb-4">Session Type</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 stagger">
-                {arcTypes.length === 0 && !error && Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="skeleton" style={{ height: 110, borderRadius: 20 }} />
+              <p className="label-dim" style={{ marginBottom: 12 }}>Session Type</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} className="stagger">
+                {arcTypes.length === 0 && !error && Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="skeleton" style={{ height: 56, borderRadius: 16 }} />
                 ))}
                 {arcTypes.map(arc => {
                   const color  = ARC_ACCENT[arc.key] || '#e8305a'
@@ -163,46 +229,61 @@ export default function SomaDashboard() {
                     <button
                       key={arc.key}
                       onClick={() => setSelectedArc(arc.key)}
-                      className="glass-card glass-card-hover p-4 text-left fade-up"
+                      className="fade-up"
                       style={{
-                        borderColor:  active ? `${color}50` : 'rgba(255,255,255,0.06)',
-                        boxShadow: active
-                          ? `0 0 28px ${color}18, 0 8px 32px rgba(0,0,0,0.35)`
-                          : '0 4px 16px rgba(0,0,0,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 16,
+                        padding: '13px 16px',
+                        borderRadius: 16,
+                        background: active ? `${color}0d` : 'rgba(255,255,255,0.025)',
+                        border: `1px solid ${active ? color + '38' : 'rgba(255,255,255,0.06)'}`,
+                        boxShadow: active ? `0 0 28px ${color}12` : 'none',
+                        transition: 'all 0.22s ease',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        width: '100%',
                       }}
                     >
-                      {/* Label + BPM range */}
-                      <div className="flex items-start justify-between mb-3">
+                      {/* Mini waveform */}
+                      <MiniArc arcKey={arc.key} color={color} active={active} />
+
+                      {/* Label + description */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <span
                           className="heading-display"
                           style={{
-                            fontSize: 11,
-                            color: active ? color : 'rgba(255,255,255,0.65)',
-                            transition: 'color 0.25s ease',
+                            fontSize: 10,
+                            color: active ? color : 'rgba(255,255,255,0.58)',
+                            transition: 'color 0.22s ease',
+                            display: 'block',
+                            marginBottom: 3,
                           }}
                         >
                           {arc.label}
                         </span>
-                        <div className="flex items-center gap-1" style={{ marginTop: 1 }}>
-                          <span className="dot-matrix" style={{ fontSize: 9, color: active ? color : 'rgba(255,255,255,0.28)' }}>
-                            {arc.bpm_start}
-                          </span>
-                          <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: 8 }}>–</span>
-                          <span className="dot-matrix" style={{ fontSize: 9, color: active ? color : 'rgba(255,255,255,0.28)' }}>
-                            {arc.bpm_peak}
-                          </span>
-                        </div>
+                        <p style={{
+                          fontSize: 10,
+                          color: 'rgba(255,255,255,0.28)',
+                          fontFamily: 'DM Sans',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          lineHeight: 1.4,
+                        }}>
+                          {arc.description}
+                        </p>
                       </div>
 
-                      {/* Mini waveform */}
-                      <div className="mb-3">
-                        <MiniArc arcKey={arc.key} color={color} active={active} />
+                      {/* BPM range */}
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span
+                          className="dot-matrix"
+                          style={{ fontSize: 10, color: active ? color : 'rgba(255,255,255,0.22)', transition: 'color 0.22s ease' }}
+                        >
+                          {arc.bpm_start}–{arc.bpm_peak}
+                        </span>
                       </div>
-
-                      {/* Description */}
-                      <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', lineHeight: 1.5, fontFamily: 'DM Sans' }}>
-                        {arc.description}
-                      </p>
                     </button>
                   )
                 })}
@@ -210,13 +291,18 @@ export default function SomaDashboard() {
             </div>
 
             {/* Duration slider */}
-            <div className="fade-up" style={{ animationDelay: '120ms' }}>
-              <div className="flex justify-between items-baseline mb-3">
+            <div className="fade-up" style={{ animationDelay: '110ms' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                 <p className="label-dim">Duration</p>
-                <div className="flex items-baseline gap-1">
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
                   <span
                     className="dot-matrix"
-                    style={{ fontSize: 22, color: homeAccent, textShadow: `0 0 12px ${homeAccent}`, transition: 'color 0.4s ease, text-shadow 0.4s ease' }}
+                    style={{
+                      fontSize: 22,
+                      color: homeAccent,
+                      textShadow: `0 0 12px ${homeAccent}80`,
+                      transition: 'color 0.4s ease, text-shadow 0.4s ease',
+                    }}
                   >
                     {duration}
                   </span>
@@ -227,35 +313,39 @@ export default function SomaDashboard() {
                 type="range" min={15} max={180} step={15}
                 value={duration}
                 onChange={e => setDuration(Number(e.target.value))}
-                style={{ '--accent': homeAccent } as React.CSSProperties}
               />
-              <div className="flex justify-between mt-2">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
                 <span className="label-dim">15 min</span>
                 <span className="label-dim">3 hr</span>
               </div>
             </div>
 
-            {/* Divider */}
             <div className="soma-divider" />
 
             {/* Start button */}
             <button
               onClick={startSession}
               disabled={loading || !selectedArc}
-              className="w-full py-5 rounded-2xl heading-display fade-up"
+              className="heading-display fade-up"
               style={{
-                fontSize: 12,
-                letterSpacing: '0.28em',
-                background: `linear-gradient(135deg, ${homeAccent}e0 0%, ${homeAccent}99 100%)`,
-                border: `1px solid ${homeAccent}44`,
-                boxShadow: `0 0 48px ${homeAccent}28, 0 8px 28px rgba(0,0,0,0.4)`,
-                opacity: loading ? 0.6 : 1,
+                width: '100%',
+                fontSize: 11,
+                letterSpacing: '0.3em',
+                padding: '19px',
+                borderRadius: 18,
+                background: loading
+                  ? 'rgba(255,255,255,0.06)'
+                  : `linear-gradient(135deg, ${homeAccent}cc 0%, ${homeAccent}88 100%)`,
+                border: `1px solid ${homeAccent}30`,
+                boxShadow: loading ? 'none' : `0 0 48px ${homeAccent}1e, 0 8px 28px rgba(0,0,0,0.35)`,
+                opacity: loading ? 0.65 : 1,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'opacity 0.3s ease, box-shadow 0.3s ease',
-                animationDelay: '160ms',
+                transition: 'all 0.28s ease',
+                animationDelay: '150ms',
+                color: 'rgba(255,255,255,0.95)',
               }}
             >
-              {loading ? 'Planning Session...' : 'Start Session'}
+              {loading ? 'Planning Session…' : 'Start Session'}
             </button>
           </div>
         </div>
@@ -263,270 +353,288 @@ export default function SomaDashboard() {
     )
   }
 
-  /* ─── SESSION ──────────────────────────────────── */
-  const totalTracks = session?.total_tracks ?? 0
-
+  /* ─── SESSION ────────────────────────────────────────────── */
   return (
     <div className="relative min-h-screen z-10">
-      {/* Ambient orbs — dimmer in session */}
-      <div className="orb orb-pink" style={{ opacity: 0.35 }} />
-      <div className="orb orb-teal" style={{ opacity: 0.25 }} />
+      <div className="orb orb-pink" style={{ opacity: 0.28 }} />
+      <div className="orb orb-teal" style={{ opacity: 0.18 }} />
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 fade-in">
+      <div className="fade-in" style={{ maxWidth: 980, margin: '0 auto', padding: '18px 16px 48px' }}>
 
-        {/* Error banner */}
+        {/* Error */}
         {error && (
-          <div
-            className="glass-card"
-            style={{ padding: '12px 16px', borderColor: 'rgba(232,48,90,0.35)' }}
-          >
+          <div className="glass-card" style={{ padding: '12px 16px', borderColor: 'rgba(232,48,90,0.35)', marginBottom: 14 }}>
             <p style={{ fontSize: 12, color: '#e8305a' }}>{error}</p>
           </div>
         )}
 
         {/* Top bar */}
-        <div className="flex items-center justify-between">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <button
             onClick={() => setView('home')}
-            className="label-mid hover:text-white transition-colors px-3 py-2 -ml-3 rounded-xl"
-            style={{ background: 'rgba(255,255,255,0.0)', transition: 'background 0.2s ease, color 0.2s ease' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.0)')}
+            className="label-mid"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px 8px 10px',
+              borderRadius: 12,
+              background: 'transparent',
+              border: '1px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
           >
-            ← Back
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M8 10L4 6l4-4" />
+            </svg>
+            Back
           </button>
-          <span className="heading-display" style={{ fontSize: 10, letterSpacing: '0.45em', color: 'rgba(255,255,255,0.4)' }}>
+
+          <span className="heading-display" style={{ fontSize: 9, letterSpacing: '0.52em', color: 'rgba(255,255,255,0.3)' }}>
             SOMA
           </span>
-          <span className="dot-matrix" style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
-            {currentPosition}&nbsp;/&nbsp;{totalTracks}
+
+          <span className="dot-matrix" style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)' }}>
+            {currentPosition}&thinsp;/&thinsp;{totalTracks}
           </span>
         </div>
 
-        {/* Session progress dots */}
+        {/* Session progress line */}
         {totalTracks > 0 && (
-          <div className="flex gap-1.5 flex-wrap px-1">
-            {Array.from({ length: Math.min(totalTracks, 30) }).map((_, i) => {
-              const pos       = i + 1
-              const isCurrent = pos === currentPosition
-              const isPast    = pos < currentPosition
-              return (
-                <div
-                  key={i}
-                  style={{
-                    width: isCurrent ? 18 : 5,
-                    height: 5,
-                    borderRadius: isCurrent ? 3 : '50%',
-                    background: isCurrent
-                      ? sessionAccent
-                      : isPast
-                        ? 'rgba(255,255,255,0.22)'
-                        : 'rgba(255,255,255,0.07)',
-                    boxShadow: isCurrent ? `0 0 8px ${sessionAccent}` : 'none',
-                    transition: 'all 0.4s cubic-bezier(0.34,1.56,0.64,1)',
-                    flexShrink: 0,
-                  }}
-                />
-              )
-            })}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ height: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
+              <div style={{
+                height: '100%',
+                width: `${progressPct}%`,
+                background: `linear-gradient(90deg, ${sessionAccent}88, ${sessionAccent})`,
+                borderRadius: 2,
+                boxShadow: `0 0 8px ${sessionAccent}55`,
+                transition: 'width 0.7s cubic-bezier(0.22,1,0.36,1)',
+              }} />
+            </div>
           </div>
         )}
 
-        {/* Now Playing card */}
-        <div
-          className="glass-card"
-          style={{
-            padding: '28px 24px',
-            boxShadow: `0 0 70px ${sessionAccent}12, 0 20px 60px rgba(0,0,0,0.55)`,
-            borderColor: `${sessionAccent}20`,
-          }}
-        >
-          {done ? (
-            /* ── Session complete ── */
-            <div className="text-center py-10 fade-up">
-              <p
-                className="heading-display mb-3"
-                style={{ fontSize: 26, color: sessionAccent, letterSpacing: '0.18em' }}
-              >
-                Session Complete
-              </p>
-              <p className="label-dim mb-10">Your set has ended.</p>
-              <button
-                onClick={() => { setView('home'); setSession(null); setNowPlaying(null); setDone(false) }}
-                className="px-10 py-4 rounded-2xl heading-display"
-                style={{
-                  fontSize: 11,
-                  letterSpacing: '0.22em',
-                  background: `${sessionAccent}15`,
-                  border: `1px solid ${sessionAccent}40`,
-                  cursor: 'pointer',
-                  transition: 'background 0.2s ease',
-                }}
-              >
-                New Session
-              </button>
-            </div>
+        {/* 2-col on desktop, 1-col on mobile */}
+        <div className="session-grid">
 
-          ) : scanning && !nowPlaying ? (
-            /* ── Scanning ── */
-            <div className="flex flex-col items-center py-10 gap-4">
-              <TransitionScanner scanning={true} label="Selecting next track" />
-            </div>
-
-          ) : nowPlaying ? (
-            /* ── Now playing ── */
-            <>
-              {/* Track info */}
-              <div className="mb-7">
-                <p className="label-dim mb-3">Now Playing</p>
-                <h2
-                  className="font-display font-light leading-tight mb-2"
-                  style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.01em' }}
+          {/* ── LEFT: Now Playing ── */}
+          <div
+            className="glass-card"
+            style={{
+              padding: '28px 26px',
+              boxShadow: `0 0 80px ${sessionAccent}0e, 0 24px 64px rgba(0,0,0,0.48)`,
+              borderColor: `${sessionAccent}18`,
+            }}
+          >
+            {done ? (
+              /* ── Done ── */
+              <div className="text-center scale-in" style={{ padding: '44px 0' }}>
+                <p
+                  className="heading-display"
+                  style={{ fontSize: 22, color: sessionAccent, letterSpacing: '0.2em', marginBottom: 10 }}
                 >
-                  {nowPlaying.title}
-                </h2>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', fontFamily: 'DM Sans', fontWeight: 300 }}>
-                  {nowPlaying.artist}
+                  Session Complete
                 </p>
-              </div>
-
-              {/* Metrics row */}
-              <div className="grid grid-cols-3 gap-3 mb-7">
-                {[
-                  { label: 'BPM',    value: String(Math.round(nowPlaying.bpm)),    color: '#e8305a' },
-                  { label: 'Key',    value: (nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : '—', color: '#0fd4b8' },
-                  { label: 'Target', value: String(Math.round(nowPlaying.target_bpm)), color: '#4488ff' },
-                ].map(m => (
-                  <div
-                    key={m.label}
-                    className="glass-card text-center"
-                    style={{ padding: '14px 8px', boxShadow: `0 0 18px ${m.color}10` }}
-                  >
-                    <p className="label-dim mb-2">{m.label}</p>
-                    <span
-                      key={m.value}
-                      className="dot-matrix count-up"
-                      style={{ fontSize: 24, display: 'block', color: m.color, textShadow: `0 0 12px ${m.color}, 0 0 24px ${m.color}55` }}
-                    >
-                      {m.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Divider */}
-              <div className="soma-divider mb-6" />
-
-              {/* Audio player */}
-              <div className="mb-6">
-                <AudioPlayer
-                  audioUrl={nowPlaying.audio_url}
-                  onEnded={() => handleEvent('completed')}
-                />
-              </div>
-
-              {/* Controls: skip + star rating */}
-              <div className="flex gap-2 items-center">
+                <p className="label-dim" style={{ marginBottom: 36 }}>Your set has ended.</p>
                 <button
-                  onClick={() => handleEvent('skipped')}
-                  className="label-mid hover:text-white rounded-xl transition-all"
+                  onClick={() => { setView('home'); setSession(null); setNowPlaying(null); setDone(false) }}
+                  className="heading-display"
                   style={{
-                    padding: '11px 16px',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    fontSize: 10,
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    fontFamily: 'DM Sans',
+                    fontSize: 10, letterSpacing: '0.24em',
+                    padding: '14px 38px', borderRadius: 14,
+                    background: `${sessionAccent}10`,
+                    border: `1px solid ${sessionAccent}32`,
                     cursor: 'pointer',
+                    color: 'rgba(255,255,255,0.85)',
                     transition: 'background 0.2s ease',
-                    flexShrink: 0,
                   }}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${sessionAccent}20`)}
+                  onMouseLeave={e => (e.currentTarget.style.background = `${sessionAccent}10`)}
                 >
-                  Skip
+                  New Session
                 </button>
-                <div className="flex flex-1 gap-1.5">
-                  {[1, 2, 3, 4, 5].map(r => (
-                    <button
-                      key={r}
-                      onClick={() => handleEvent('completed', r)}
-                      className="flex-1 rounded-xl transition-all"
+              </div>
+
+            ) : scanning && !nowPlaying ? (
+              /* ── Scanning ── */
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '52px 0', gap: 16 }}>
+                <TransitionScanner scanning={true} label="Selecting next track" />
+              </div>
+
+            ) : nowPlaying ? (
+              /* ── Now Playing ── */
+              <div key={nowPlaying.position} className="track-enter">
+
+                {/* Track info */}
+                <div style={{ marginBottom: 22 }}>
+                  <p className="label-dim" style={{ marginBottom: 10 }}>Now Playing</p>
+                  <h2
+                    className="font-display"
+                    style={{
+                      fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
+                      fontWeight: 300,
+                      color: 'rgba(255,255,255,0.96)',
+                      letterSpacing: '-0.015em',
+                      lineHeight: 1.12,
+                      marginBottom: 9,
+                    }}
+                  >
+                    {nowPlaying.title}
+                  </h2>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.36)', fontFamily: 'DM Sans', fontWeight: 300, letterSpacing: '0.02em' }}>
+                    {nowPlaying.artist}
+                  </p>
+                </div>
+
+                {/* Metric pills */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 22 }}>
+                  {[
+                    { label: 'BPM',    value: String(Math.round(nowPlaying.bpm)),    color: '#e8305a' },
+                    { label: 'Key',    value: (nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : '—', color: '#0fd4b8' },
+                    { label: 'Target', value: String(Math.round(nowPlaying.target_bpm)), color: '#4488ff' },
+                  ].map(m => (
+                    <div
+                      key={m.label}
                       style={{
-                        padding: '11px 4px',
-                        background: `${sessionAccent}0c`,
-                        border: `1px solid ${sessionAccent}22`,
-                        color: 'rgba(255,255,255,0.5)',
-                        fontSize: 13,
-                        cursor: 'pointer',
-                        transition: 'background 0.2s ease, color 0.2s ease',
-                      }}
-                      onMouseEnter={e => {
-                        const b = e.currentTarget
-                        b.style.background = `${sessionAccent}28`
-                        b.style.color = 'rgba(255,255,255,0.9)'
-                      }}
-                      onMouseLeave={e => {
-                        const b = e.currentTarget
-                        b.style.background = `${sessionAccent}0c`
-                        b.style.color = 'rgba(255,255,255,0.5)'
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '7px 14px',
+                        borderRadius: 100,
+                        background: `${m.color}0d`,
+                        border: `1px solid ${m.color}26`,
                       }}
                     >
-                      {'★'.repeat(r)}{'☆'.repeat(5 - r)}
-                    </button>
+                      <span className="label-dim" style={{ fontSize: 9 }}>{m.label}</span>
+                      <span
+                        key={m.value}
+                        className="dot-matrix count-up"
+                        style={{ fontSize: 15, color: m.color, textShadow: `0 0 10px ${m.color}70` }}
+                      >
+                        {m.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="soma-divider" style={{ marginBottom: 20 }} />
+
+                {/* Audio player */}
+                <div style={{ marginBottom: 20 }}>
+                  <AudioPlayer
+                    audioUrl={nowPlaying.audio_url}
+                    onEnded={() => handleEvent('completed')}
+                  />
+                </div>
+
+                {/* Controls: skip + star rating */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    onClick={() => handleEvent('skipped')}
+                    className="label-mid"
+                    style={{
+                      padding: '12px 20px',
+                      borderRadius: 14,
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      fontSize: 10,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      fontFamily: 'DM Sans',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'background 0.18s ease',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                  >
+                    Skip
+                  </button>
+
+                  {/* Star rating */}
+                  <div
+                    style={{ display: 'flex', flex: 1, gap: 6 }}
+                    onMouseLeave={() => setHoverRating(0)}
+                  >
+                    {[1, 2, 3, 4, 5].map(r => (
+                      <button
+                        key={r}
+                        onClick={() => handleEvent('completed', r)}
+                        onMouseEnter={() => setHoverRating(r)}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '12px 0',
+                          borderRadius: 14,
+                          background: r <= hoverRating ? `${sessionAccent}18` : `${sessionAccent}07`,
+                          border: `1px solid ${r <= hoverRating ? sessionAccent + '44' : sessionAccent + '14'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.12s ease',
+                        }}
+                      >
+                        <StarIcon filled={r <= hoverRating} color={sessionAccent} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Scanning overlay while transitioning */}
+                {scanning && (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+                    <TransitionScanner scanning={true} />
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          {/* ── RIGHT: Context sidebar ── */}
+          {session && !done && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* BPM Arc */}
+              <div className="glass-card" style={{ padding: '18px 20px' }}>
+                <p className="label-dim" style={{ marginBottom: 12 }}>BPM Arc</p>
+                <EnergyArc tracks={session.tracks} currentPosition={currentPosition} />
+                <div className="soma-divider" style={{ margin: '12px 0 10px' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  {[
+                    { label: 'start', val: session.bpm_start },
+                    { label: 'peak',  val: session.bpm_peak  },
+                    { label: 'end',   val: session.bpm_end   },
+                  ].map(x => (
+                    <div key={x.label} style={{ textAlign: x.label === 'end' ? 'right' : x.label === 'peak' ? 'center' : 'left' }}>
+                      <span className="dot-matrix" style={{ fontSize: 13, color: sessionAccent }}>{x.val}</span>
+                      <p className="label-dim" style={{ marginTop: 3 }}>{x.label}</p>
+                    </div>
                   ))}
                 </div>
               </div>
 
-              {/* Scanning overlay indicator */}
-              {scanning && (
-                <div className="flex justify-center mt-5">
-                  <TransitionScanner scanning={true} />
+              {/* Camelot Wheel */}
+              {nowPlaying && (
+                <div className="glass-card" style={{ padding: '18px 20px' }}>
+                  <p className="label-dim" style={{ marginBottom: 14 }}>Camelot Wheel</p>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <CamelotWheel
+                      activeCode={(nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : null}
+                      size={180}
+                    />
+                  </div>
                 </div>
               )}
-            </>
-          ) : null}
+
+              {/* Queue */}
+              <div className="glass-card" style={{ padding: '18px 20px' }}>
+                <SessionQueue tracks={session.tracks} currentPosition={currentPosition} />
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Camelot wheel + BPM arc */}
-        {session && nowPlaying && !done && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="glass-card glow-key p-5 flex flex-col items-center">
-              <p className="label-dim mb-4">Camelot</p>
-              <CamelotWheel
-                activeCode={(nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : null}
-                size={188}
-              />
-            </div>
-            <div className="glass-card glow-compat p-5 flex flex-col">
-              <p className="label-dim mb-3">BPM Arc</p>
-              <div className="flex-1">
-                <EnergyArc tracks={session.tracks} currentPosition={currentPosition} />
-              </div>
-              <div className="soma-divider my-3" />
-              <div className="flex justify-between">
-                {[
-                  { label: 'start', val: session.bpm_start },
-                  { label: 'peak',  val: session.bpm_peak  },
-                  { label: 'end',   val: session.bpm_end   },
-                ].map(x => (
-                  <div key={x.label} style={{ textAlign: x.label === 'end' ? 'right' : x.label === 'peak' ? 'center' : 'left' }}>
-                    <span className="dot-matrix" style={{ fontSize: 14, color: sessionAccent }}>{x.val}</span>
-                    <p className="label-dim" style={{ marginTop: 2 }}>{x.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Queue */}
-        {session && !done && (
-          <div className="glass-card p-5">
-            <SessionQueue tracks={session.tracks} currentPosition={currentPosition} />
-          </div>
-        )}
-
-        <div style={{ height: 24 }} />
       </div>
     </div>
   )
