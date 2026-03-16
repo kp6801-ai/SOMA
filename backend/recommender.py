@@ -30,6 +30,9 @@ CAMELOT_SCORE = {0: 1.0, 1: 0.85, 2: 0.5, 3: 0.2}
 _cache_lock = threading.Lock()
 _vector_cache = None
 
+# Whitelist of valid pgvector column names (prevents SQL injection)
+_VALID_VEC_COLS = {"embedding_vec", "intro_vec", "outro_vec", "peak_vec"}
+
 
 def camelot_distance(a: str, b: str) -> int:
     if not a or not b or a == "?" or b == "?" or a == "Unknown" or b == "Unknown":
@@ -71,41 +74,51 @@ def _get_mfcc_vector(track) -> np.ndarray:
     return np.zeros(26, dtype=np.float32)
 
 
-def build_cache(db: Session):
+def _build_cache_unlocked(db: Session):
+    """Build the vector cache. Must be called with _cache_lock already held."""
     global _vector_cache
+    tracks = db.query(Track).filter(Track.bpm.isnot(None)).all()
+    if not tracks:
+        _vector_cache = None
+        return
+    # 13-dim scalar features
+    raw = np.array([track_to_raw_vector(t) for t in tracks], dtype=np.float32)
+    mean = raw.mean(axis=0)
+    std = raw.std(axis=0)
+    std[std == 0] = 1.0
+    normalized = (raw - mean) / std
+    weighted = normalized * WEIGHTS
+
+    # 26-dim MFCC matrix (Phase 2)
+    mfcc_raw = np.array([_get_mfcc_vector(t) for t in tracks], dtype=np.float32)
+    mfcc_mean = mfcc_raw.mean(axis=0)
+    mfcc_std = mfcc_raw.std(axis=0)
+    mfcc_std[mfcc_std == 0] = 1.0
+    mfcc_normalized = (mfcc_raw - mfcc_mean) / mfcc_std
+
+    _vector_cache = {
+        "tracks": tracks,
+        "matrix": weighted,
+        "mean": mean, "std": std,
+        "mfcc_matrix": mfcc_normalized,
+        "mfcc_mean": mfcc_mean, "mfcc_std": mfcc_std,
+    }
+
+
+def build_cache(db: Session):
     with _cache_lock:
-        tracks = db.query(Track).filter(Track.bpm.isnot(None)).all()
-        if not tracks:
-            _vector_cache = None
-            return
-        # 13-dim scalar features
-        raw = np.array([track_to_raw_vector(t) for t in tracks], dtype=np.float32)
-        mean = raw.mean(axis=0)
-        std = raw.std(axis=0)
-        std[std == 0] = 1.0
-        normalized = (raw - mean) / std
-        weighted = normalized * WEIGHTS
-
-        # 26-dim MFCC matrix (Phase 2)
-        mfcc_raw = np.array([_get_mfcc_vector(t) for t in tracks], dtype=np.float32)
-        mfcc_mean = mfcc_raw.mean(axis=0)
-        mfcc_std = mfcc_raw.std(axis=0)
-        mfcc_std[mfcc_std == 0] = 1.0
-        mfcc_normalized = (mfcc_raw - mfcc_mean) / mfcc_std
-
-        _vector_cache = {
-            "tracks": tracks,
-            "matrix": weighted,
-            "mean": mean, "std": std,
-            "mfcc_matrix": mfcc_normalized,
-            "mfcc_mean": mfcc_mean, "mfcc_std": mfcc_std,
-        }
+        _build_cache_unlocked(db)
 
 
 def get_cache(db: Session):
     global _vector_cache
-    if _vector_cache is None:
-        build_cache(db)
+    # Fast path — no lock needed for a read if already populated
+    if _vector_cache is not None:
+        return _vector_cache
+    # Slow path — double-checked locking
+    with _cache_lock:
+        if _vector_cache is None:
+            _build_cache_unlocked(db)
     return _vector_cache
 
 
@@ -187,7 +200,8 @@ def recommend_tracks(db: Session, bpm: float = None, camelot: str = None,
                      energy: float = None, mood: str = None,
                      limit: int = 10, exclude_id: int = None,
                      min_score: float = 0.9,
-                     history: list[dict] = None) -> list[dict]:
+                     history: list[dict] = None,
+                     _depth: int = 0) -> list[dict]:
     """
     Precision subgenre-aware recommendations.
     - Filters by subgenre envelope first (hard constraints)
@@ -263,12 +277,12 @@ def recommend_tracks(db: Session, bpm: float = None, camelot: str = None,
     # Sort and enforce score floor
     results.sort(key=lambda x: x[0], reverse=True)
 
-    # If best result is below min_score, relax constraints and retry
-    if results and results[0][0] < min_score and mood:
+    # If best result is below min_score, relax constraints and retry (max 3 times)
+    if results and results[0][0] < min_score and mood and _depth < 3:
         return recommend_tracks(db, bpm=bpm, camelot=camelot, energy=energy,
                                 mood=mood, limit=limit, exclude_id=exclude_id,
                                 min_score=min_score * 0.85,
-                                history=history)
+                                history=history, _depth=_depth + 1)
 
     # Build results with explanation payload (Phase 2.6)
     output = []
@@ -380,6 +394,10 @@ def pgvector_similar(db: Session, track_id: int, limit: int = 10,
     else:
         vec_col_source = "embedding_vec"
         vec_col_target = "embedding_vec"
+
+    # Validate column names against whitelist to prevent SQL injection
+    if vec_col_source not in _VALID_VEC_COLS or vec_col_target not in _VALID_VEC_COLS:
+        return similar_tracks(db, track_id, limit)
 
     try:
         # Try pgvector cosine distance query

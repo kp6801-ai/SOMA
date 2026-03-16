@@ -12,17 +12,21 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false)
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
     if (audioUrl) {
       audio.load()
-      audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false))
+      audio.play()
+        .then(() => { setPlaying(true); setAutoplayBlocked(false) })
+        .catch(() => { setPlaying(false); setAutoplayBlocked(true) })
     } else {
       audio.pause()
       setPlaying(false)
       setProgress(0)
+      setAutoplayBlocked(false)
     }
   }, [audioUrl])
 
@@ -31,20 +35,28 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
     if (!audio) return
     const onTime = () => setProgress(audio.currentTime)
     const onMeta = () => setDuration(audio.duration)
+    const onEnd  = () => { setPlaying(false); onEnded?.() }
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('loadedmetadata', onMeta)
-    audio.addEventListener('ended', () => { setPlaying(false); onEnded?.() })
+    audio.addEventListener('ended', onEnd)
     return () => {
       audio.removeEventListener('timeupdate', onTime)
       audio.removeEventListener('loadedmetadata', onMeta)
+      audio.removeEventListener('ended', onEnd)
     }
   }, [onEnded])
 
   const togglePlay = () => {
     const audio = audioRef.current
     if (!audio || !audioUrl) return
-    if (playing) { audio.pause(); setPlaying(false) }
-    else { audio.play(); setPlaying(true) }
+    if (playing) {
+      audio.pause()
+      setPlaying(false)
+    } else {
+      audio.play()
+        .then(() => { setPlaying(true); setAutoplayBlocked(false) })
+        .catch(() => setPlaying(false))
+    }
   }
 
   const pct = duration ? (progress / duration) * 100 : 0
@@ -72,7 +84,6 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
             transition: 'width 0.5s linear',
           }}
         />
-        {/* Marker */}
         <div
           className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
           style={{
@@ -113,6 +124,12 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
 
         <span className="label-dim">{fmt(duration)}</span>
       </div>
+
+      {autoplayBlocked && !playing && audioUrl && (
+        <p className="label-dim text-center" style={{ color: '#ffaa22', opacity: 0.8 }}>
+          Tap ▶ to start playback
+        </p>
+      )}
 
       {!audioUrl && (
         <p className="label-dim text-center" style={{ opacity: 0.35 }}>

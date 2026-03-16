@@ -38,42 +38,46 @@ def create_session(db: DBSession, arc_type: str, duration_min: int) -> dict:
     used_ids: set[int] = set()
     slots = []
 
-    for position, target_bpm in enumerate(bpm_steps, start=1):
-        # Get candidates, exclude already-used tracks
-        candidates = recommend_tracks(db, bpm=target_bpm, limit=20)
-        candidates = [c for c in candidates if c["id"] not in used_ids]
+    try:
+        for position, target_bpm in enumerate(bpm_steps, start=1):
+            # Get candidates, exclude already-used tracks
+            candidates = recommend_tracks(db, bpm=target_bpm, limit=20)
+            candidates = [c for c in candidates if c["id"] not in used_ids]
 
-        if not candidates:
-            # Relax: allow reuse if we've exhausted the catalog
-            candidates = recommend_tracks(db, bpm=target_bpm, limit=5)
+            if not candidates:
+                # Relax: allow reuse if we've exhausted the catalog
+                candidates = recommend_tracks(db, bpm=target_bpm, limit=5)
 
-        if not candidates:
-            continue
+            if not candidates:
+                continue
 
-        chosen = candidates[0]
-        used_ids.add(chosen["id"])
+            chosen = candidates[0]
+            used_ids.add(chosen["id"])
 
-        slot = SessionTrack(
-            session_id=session.id,
-            track_id=chosen["id"],
-            position=position,
-            target_bpm=target_bpm,
-            status="pending",
-        )
-        db.add(slot)
-        slots.append({
-            "position": position,
-            "target_bpm": target_bpm,
-            "track_id": chosen["id"],
-            "title": chosen["title"],
-            "artist": chosen["artist"],
-            "bpm": chosen["bpm"],
-            "camelot": chosen.get("camelot"),
-            "energy": chosen.get("energy"),
-            "score": chosen.get("score"),
-        })
+            slot = SessionTrack(
+                session_id=session.id,
+                track_id=chosen["id"],
+                position=position,
+                target_bpm=target_bpm,
+                status="pending",
+            )
+            db.add(slot)
+            slots.append({
+                "position": position,
+                "target_bpm": target_bpm,
+                "track_id": chosen["id"],
+                "title": chosen["title"],
+                "artist": chosen["artist"],
+                "bpm": chosen["bpm"],
+                "camelot": chosen.get("camelot"),
+                "energy": chosen.get("energy"),
+                "score": chosen.get("score"),
+            })
 
-    db.commit()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "session_id": session.id,

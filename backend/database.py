@@ -80,6 +80,13 @@ class Track(Base):
     peak_vector = Column(ARRAY(Float))    # 39-dim peak/body embedding
     outro_vector = Column(ARRAY(Float))   # 39-dim outro embedding
 
+    __table_args__ = (
+        Index("idx_tracks_bpm", "bpm"),
+        Index("idx_tracks_camelot", "camelot_code"),
+        Index("idx_tracks_energy_tag", "energy_tag"),
+        Index("idx_tracks_bpm_energy", "bpm", "energy"),
+    )
+
 
 class LabelRelationship(Base):
     """Phase 1.4: Label compatibility scores."""

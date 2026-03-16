@@ -12,10 +12,13 @@ load_dotenv()
 
 app = FastAPI(title="SOMA API", version="1.0.0")
 
+_raw_origins = os.getenv("CORS_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -33,4 +36,4 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "environment": os.getenv("ENVIRONMENT")}
+    return {"status": "healthy"}
