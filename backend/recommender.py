@@ -81,6 +81,10 @@ def _build_cache_unlocked(db: Session):
     if not tracks:
         _vector_cache = None
         return
+    # Detach tracks from the DB session so cached objects survive commits
+    # (all scalar attributes are already loaded, expunge keeps them in memory)
+    for t in tracks:
+        db.expunge(t)
     # 13-dim scalar features
     raw = np.array([track_to_raw_vector(t) for t in tracks], dtype=np.float32)
     mean = raw.mean(axis=0)
