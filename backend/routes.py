@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from database import get_db, Track
+from limiter import limiter
 from camelot import get_camelot, compatible_keys
 from recommender import recommend_tracks, similar_tracks, pgvector_similar, invalidate_cache
 from moods import list_moods, get_profile, SUBGENRE_PROFILES
@@ -16,8 +15,6 @@ from typing import Optional
 import tempfile
 import shutil
 import os
-
-limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
