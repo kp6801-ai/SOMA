@@ -5,14 +5,25 @@ import { useEffect, useRef, useState } from 'react'
 interface Props {
   audioUrl: string | null
   onEnded?: () => void
+  /** If provided, the parent controls the audio element via this ref */
+  audioRef?: React.RefObject<HTMLAudioElement | null>
+  /** Called whenever play/pause state changes */
+  onPlayingChange?: (playing: boolean) => void
 }
 
-export default function AudioPlayer({ audioUrl, onEnded }: Props) {
-  const audioRef = useRef<HTMLAudioElement>(null)
+export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, onPlayingChange }: Props) {
+  const internalRef = useRef<HTMLAudioElement>(null)
+  const audioRef = externalRef ?? internalRef
+
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
+
+  const setPlayState = (v: boolean) => {
+    setPlaying(v)
+    onPlayingChange?.(v)
+  }
 
   useEffect(() => {
     const audio = audioRef.current
@@ -20,14 +31,15 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
     if (audioUrl) {
       audio.load()
       audio.play()
-        .then(() => { setPlaying(true); setAutoplayBlocked(false) })
-        .catch(() => { setPlaying(false); setAutoplayBlocked(true) })
+        .then(() => { setPlayState(true); setAutoplayBlocked(false) })
+        .catch(() => { setPlayState(false); setAutoplayBlocked(true) })
     } else {
       audio.pause()
-      setPlaying(false)
+      setPlayState(false)
       setProgress(0)
       setAutoplayBlocked(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl])
 
   useEffect(() => {
@@ -35,7 +47,7 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
     if (!audio) return
     const onTime = () => setProgress(audio.currentTime)
     const onMeta = () => setDuration(audio.duration)
-    const onEnd  = () => { setPlaying(false); onEnded?.() }
+    const onEnd  = () => { setPlayState(false); onEnded?.() }
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('loadedmetadata', onMeta)
     audio.addEventListener('ended', onEnd)
@@ -44,6 +56,7 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
       audio.removeEventListener('loadedmetadata', onMeta)
       audio.removeEventListener('ended', onEnd)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onEnded])
 
   const togglePlay = () => {
@@ -51,59 +64,57 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
     if (!audio || !audioUrl) return
     if (playing) {
       audio.pause()
-      setPlaying(false)
+      setPlayState(false)
     } else {
       audio.play()
-        .then(() => { setPlaying(true); setAutoplayBlocked(false) })
-        .catch(() => setPlaying(false))
+        .then(() => { setPlayState(true); setAutoplayBlocked(false) })
+        .catch(() => setPlayState(false))
     }
   }
 
   const pct = duration ? (progress / duration) * 100 : 0
 
   return (
-    <div className="flex flex-col gap-3 w-full">
-      <audio ref={audioRef} src={audioUrl || ''} preload="metadata" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+      <audio ref={audioRef as React.RefObject<HTMLAudioElement>} src={audioUrl || ''} preload="metadata" />
 
       {/* Progress bar */}
       <div
-        className="relative w-full h-1 rounded-full cursor-pointer"
-        style={{ background: 'rgba(255,255,255,0.08)' }}
+        style={{ position: 'relative', width: '100%', height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', cursor: 'pointer' }}
         onClick={e => {
           const rect = e.currentTarget.getBoundingClientRect()
-          const pct = (e.clientX - rect.left) / rect.width
-          if (audioRef.current) audioRef.current.currentTime = pct * duration
+          const p = (e.clientX - rect.left) / rect.width
+          if (audioRef.current) audioRef.current.currentTime = p * duration
         }}
       >
-        <div
-          className="absolute left-0 top-0 h-full rounded-full"
-          style={{
-            width: `${pct}%`,
-            background: 'linear-gradient(90deg, #e8305a, #c0195e)',
-            boxShadow: '0 0 8px rgba(232,48,90,0.6)',
-            transition: 'width 0.5s linear',
-          }}
-        />
-        <div
-          className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
-          style={{
-            left: `${pct}%`,
-            background: '#e8305a',
-            boxShadow: '0 0 6px #e8305a',
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
+        <div style={{
+          position: 'absolute', left: 0, top: 0, height: '100%',
+          width: `${pct}%`,
+          background: 'linear-gradient(90deg, #e8305a, #c0195e)',
+          boxShadow: '0 0 8px rgba(232,48,90,0.6)',
+          borderRadius: 2,
+          transition: 'width 0.5s linear',
+        }} />
+        <div style={{
+          position: 'absolute', top: '50%',
+          left: `${pct}%`,
+          transform: 'translate(-50%, -50%)',
+          width: 10, height: 10, borderRadius: '50%',
+          background: '#e8305a',
+          boxShadow: '0 0 6px #e8305a',
+        }} />
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-between">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span className="label-dim">{fmt(progress)}</span>
 
         <button
           onClick={togglePlay}
           disabled={!audioUrl}
-          className="w-10 h-10 rounded-full flex items-center justify-center"
           style={{
+            width: 40, height: 40, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: audioUrl ? 'rgba(232,48,90,0.15)' : 'rgba(255,255,255,0.05)',
             border: '1px solid rgba(232,48,90,0.3)',
             cursor: audioUrl ? 'pointer' : 'not-allowed',
@@ -126,13 +137,13 @@ export default function AudioPlayer({ audioUrl, onEnded }: Props) {
       </div>
 
       {autoplayBlocked && !playing && audioUrl && (
-        <p className="label-dim text-center" style={{ color: '#ffaa22', opacity: 0.8 }}>
+        <p className="label-dim" style={{ textAlign: 'center', color: '#ffaa22', opacity: 0.8 }}>
           Tap ▶ to start playback
         </p>
       )}
 
       {!audioUrl && (
-        <p className="label-dim text-center" style={{ opacity: 0.35 }}>
+        <p className="label-dim" style={{ textAlign: 'center', opacity: 0.35 }}>
           Audio not available for this track
         </p>
       )}

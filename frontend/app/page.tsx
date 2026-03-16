@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, ArcType, Session, NowPlaying } from '@/lib/api'
 import CamelotWheel from '@/components/CamelotWheel'
 import EnergyArc from '@/components/EnergyArc'
 import TransitionScanner from '@/components/TransitionScanner'
 import AudioPlayer from '@/components/AudioPlayer'
 import SessionQueue from '@/components/SessionQueue'
+import FrequencyVisualizer from '@/components/FrequencyVisualizer'
+import BpmKnob from '@/components/BpmKnob'
 
 type View = 'home' | 'session'
 
@@ -30,49 +32,9 @@ const ARC_ACCENT: Record<string, string> = {
   hiit:       '#ffaa22',
 }
 
-/* ── Hero arc: full-width waveform for selected arc ── */
-function HeroArc({ arcKey, color }: { arcKey: string; color: string }) {
-  const pts = ARC_SHAPES[arcKey] || Array(10).fill(0.5)
-  const W = 400; const H = 52
-  const points = pts.map((v, i) =>
-    `${(i / (pts.length - 1)) * W},${H - v * (H - 8) - 4}`
-  ).join(' ')
-  return (
-    <svg
-      width="100%" height={H}
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      style={{ display: 'block', overflow: 'visible' }}
-    >
-      <defs>
-        <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"   stopColor={color} stopOpacity="0.3" />
-          <stop offset="50%"  stopColor={color} stopOpacity="1"   />
-          <stop offset="100%" stopColor={color} stopOpacity="0.3" />
-        </linearGradient>
-        <filter id="heroGlow">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-      </defs>
-      <polyline
-        points={points}
-        fill="none"
-        stroke="url(#heroGrad)"
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        filter="url(#heroGlow)"
-        className="draw-wave"
-      />
-    </svg>
-  )
-}
-
-/* ── Mini arc for arc cards ── */
 function MiniArc({ arcKey, color, active }: { arcKey: string; color: string; active: boolean }) {
   const pts = ARC_SHAPES[arcKey] || Array(10).fill(0.5)
-  const W = 60; const H = 22
+  const W = 56; const H = 20
   const points = pts.map((v, i) =>
     `${(i / (pts.length - 1)) * W},${H - v * (H - 4) - 2}`
   ).join(' ')
@@ -81,7 +43,7 @@ function MiniArc({ arcKey, color, active }: { arcKey: string; color: string; act
       <polyline
         points={points}
         fill="none"
-        stroke={active ? color : 'rgba(255,255,255,0.16)'}
+        stroke={active ? color : 'rgba(255,255,255,0.14)'}
         strokeWidth={active ? 1.5 : 1}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -91,12 +53,11 @@ function MiniArc({ arcKey, color, active }: { arcKey: string; color: string; act
   )
 }
 
-/* ── SVG star icon ── */
 function StarIcon({ filled, color }: { filled: boolean; color: string }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24"
+    <svg width="13" height="13" viewBox="0 0 24 24"
       fill={filled ? color : 'none'}
-      stroke={filled ? color : 'rgba(255,255,255,0.22)'}
+      stroke={filled ? color : 'rgba(255,255,255,0.2)'}
       strokeWidth="1.5"
       strokeLinejoin="round"
     >
@@ -117,6 +78,9 @@ export default function SomaDashboard() {
   const [done, setDone]               = useState(false)
   const [error, setError]             = useState<string | null>(null)
   const [hoverRating, setHoverRating] = useState(0)
+  const [isPlaying, setIsPlaying]     = useState(false)
+
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
     api.getArcTypes()
@@ -141,6 +105,7 @@ export default function SomaDashboard() {
     setScanning(true)
     setError(null)
     setHoverRating(0)
+    setIsPlaying(false)
     try {
       const next = await api.nextTrack(sessionId)
       if (next.done) { setDone(true); setNowPlaying(null) }
@@ -167,22 +132,22 @@ export default function SomaDashboard() {
   /* ─── HOME ──────────────────────────────────────────────── */
   if (view === 'home') {
     return (
-      <div className="relative min-h-screen z-10 flex flex-col">
+      <div style={{ position: 'relative', minHeight: '100vh', zIndex: 10 }}>
         <div className="orb orb-pink" />
         <div className="orb orb-teal" />
         <div className="orb orb-blue" />
 
-        <div
-          className="flex-1 flex flex-col items-center justify-center"
-          style={{ padding: '60px 20px', width: '100%', maxWidth: 500, margin: '0 auto' }}
-        >
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '60px 20px 80px', width: '100%', maxWidth: 480, margin: '0 auto',
+        }}>
           {/* Wordmark */}
-          <div className="text-center fade-up" style={{ marginBottom: 36 }}>
+          <div className="fade-up" style={{ textAlign: 'center', marginBottom: 40 }}>
             <h1
               className="heading-hero"
               style={{
                 fontSize: 'clamp(4rem, 14vw, 6.5rem)',
-                background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 58%)`,
+                background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 55%)`,
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
@@ -191,36 +156,29 @@ export default function SomaDashboard() {
             >
               SOMA
             </h1>
-            <p className="label-dim" style={{ marginTop: 10, letterSpacing: '0.32em' }}>
+            <p className="label-dim" style={{ marginTop: 8, letterSpacing: '0.3em' }}>
               Generative DJ Intelligence
             </p>
           </div>
 
           {/* Error banner */}
           {error && (
-            <div
-              className="w-full glass-card fade-up"
-              style={{ padding: '14px 18px', borderColor: 'rgba(232,48,90,0.35)', marginBottom: 20 }}
-            >
+            <div className="glass-card fade-up" style={{
+              width: '100%', padding: '14px 18px',
+              borderColor: 'rgba(232,48,90,0.35)', marginBottom: 20,
+            }}>
               <p style={{ fontSize: 12, color: '#e8305a', lineHeight: 1.55 }}>{error}</p>
             </div>
           )}
 
-          {/* Hero arc visualization for selected arc */}
-          {selectedArc && !error && (
-            <div className="w-full fade-up" style={{ marginBottom: 28, animationDelay: '30ms' }}>
-              <HeroArc key={selectedArc} arcKey={selectedArc} color={homeAccent} />
-            </div>
-          )}
-
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
             {/* Arc type list */}
-            <div>
-              <p className="label-dim" style={{ marginBottom: 12 }}>Session Type</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} className="stagger">
+            <div className="fade-up" style={{ animationDelay: '40ms' }}>
+              <p className="label-dim" style={{ marginBottom: 14 }}>Session Type</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }} className="stagger">
                 {arcTypes.length === 0 && !error && Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="skeleton" style={{ height: 56, borderRadius: 16 }} />
+                  <div key={i} className="skeleton" style={{ height: 58, borderRadius: 16 }} />
                 ))}
                 {arcTypes.map(arc => {
                   const color  = ARC_ACCENT[arc.key] || '#e8305a'
@@ -231,59 +189,43 @@ export default function SomaDashboard() {
                       onClick={() => setSelectedArc(arc.key)}
                       className="fade-up"
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 16,
-                        padding: '13px 16px',
-                        borderRadius: 16,
-                        background: active ? `${color}0d` : 'rgba(255,255,255,0.025)',
-                        border: `1px solid ${active ? color + '38' : 'rgba(255,255,255,0.06)'}`,
-                        boxShadow: active ? `0 0 28px ${color}12` : 'none',
-                        transition: 'all 0.22s ease',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        width: '100%',
+                        display: 'flex', alignItems: 'center', gap: 14,
+                        padding: '12px 16px', borderRadius: 16,
+                        background: active ? `${color}0d` : 'rgba(255,255,255,0.022)',
+                        border: `1px solid ${active ? color + '35' : 'rgba(255,255,255,0.055)'}`,
+                        boxShadow: active ? `0 0 24px ${color}10, 0 4px 20px rgba(0,0,0,0.3)` : 'none',
+                        transition: 'all 0.22s ease', textAlign: 'left',
+                        cursor: 'pointer', width: '100%',
                       }}
                     >
-                      {/* Mini waveform */}
                       <MiniArc arcKey={arc.key} color={color} active={active} />
 
-                      {/* Label + description */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <span
-                          className="heading-display"
-                          style={{
-                            fontSize: 10,
-                            color: active ? color : 'rgba(255,255,255,0.58)',
-                            transition: 'color 0.22s ease',
-                            display: 'block',
-                            marginBottom: 3,
-                          }}
-                        >
+                        <span className="heading-display" style={{
+                          fontSize: 10,
+                          color: active ? color : 'rgba(255,255,255,0.55)',
+                          transition: 'color 0.22s ease',
+                          display: 'block', marginBottom: 2,
+                        }}>
                           {arc.label}
                         </span>
                         <p style={{
-                          fontSize: 10,
-                          color: 'rgba(255,255,255,0.28)',
-                          fontFamily: 'DM Sans',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          lineHeight: 1.4,
+                          fontSize: 10, color: 'rgba(255,255,255,0.26)',
+                          fontFamily: 'DM Sans', fontWeight: 300,
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', lineHeight: 1.4,
                         }}>
                           {arc.description}
                         </p>
                       </div>
 
-                      {/* BPM range */}
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <span
-                          className="dot-matrix"
-                          style={{ fontSize: 10, color: active ? color : 'rgba(255,255,255,0.22)', transition: 'color 0.22s ease' }}
-                        >
-                          {arc.bpm_start}–{arc.bpm_peak}
-                        </span>
-                      </div>
+                      <span className="dot-matrix" style={{
+                        fontSize: 10, flexShrink: 0,
+                        color: active ? color : 'rgba(255,255,255,0.2)',
+                        transition: 'color 0.22s ease',
+                      }}>
+                        {arc.bpm_start}–{arc.bpm_peak}
+                      </span>
                     </button>
                   )
                 })}
@@ -291,19 +233,15 @@ export default function SomaDashboard() {
             </div>
 
             {/* Duration slider */}
-            <div className="fade-up" style={{ animationDelay: '110ms' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+            <div className="fade-up" style={{ animationDelay: '80ms' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                 <p className="label-dim">Duration</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                  <span
-                    className="dot-matrix"
-                    style={{
-                      fontSize: 22,
-                      color: homeAccent,
-                      textShadow: `0 0 12px ${homeAccent}80`,
-                      transition: 'color 0.4s ease, text-shadow 0.4s ease',
-                    }}
-                  >
+                  <span className="dot-matrix" style={{
+                    fontSize: 22, color: homeAccent,
+                    textShadow: `0 0 12px ${homeAccent}80`,
+                    transition: 'color 0.4s ease, text-shadow 0.4s ease',
+                  }}>
                     {duration}
                   </span>
                   <span className="label-dim">min</span>
@@ -328,20 +266,17 @@ export default function SomaDashboard() {
               disabled={loading || !selectedArc}
               className="heading-display fade-up"
               style={{
-                width: '100%',
-                fontSize: 11,
-                letterSpacing: '0.3em',
-                padding: '19px',
-                borderRadius: 18,
+                width: '100%', fontSize: 11, letterSpacing: '0.3em',
+                padding: '20px', borderRadius: 18,
                 background: loading
                   ? 'rgba(255,255,255,0.06)'
                   : `linear-gradient(135deg, ${homeAccent}cc 0%, ${homeAccent}88 100%)`,
-                border: `1px solid ${homeAccent}30`,
-                boxShadow: loading ? 'none' : `0 0 48px ${homeAccent}1e, 0 8px 28px rgba(0,0,0,0.35)`,
+                border: `1px solid ${homeAccent}28`,
+                boxShadow: loading ? 'none' : `0 0 48px ${homeAccent}1a, 0 8px 28px rgba(0,0,0,0.35)`,
                 opacity: loading ? 0.65 : 1,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 transition: 'all 0.28s ease',
-                animationDelay: '150ms',
+                animationDelay: '120ms',
                 color: 'rgba(255,255,255,0.95)',
               }}
             >
@@ -355,11 +290,11 @@ export default function SomaDashboard() {
 
   /* ─── SESSION ────────────────────────────────────────────── */
   return (
-    <div className="relative min-h-screen z-10">
-      <div className="orb orb-pink" style={{ opacity: 0.28 }} />
-      <div className="orb orb-teal" style={{ opacity: 0.18 }} />
+    <div style={{ position: 'relative', minHeight: '100vh', zIndex: 10 }}>
+      <div className="orb orb-pink" style={{ opacity: 0.22 }} />
+      <div className="orb orb-teal" style={{ opacity: 0.14 }} />
 
-      <div className="fade-in" style={{ maxWidth: 980, margin: '0 auto', padding: '18px 16px 48px' }}>
+      <div className="fade-in" style={{ maxWidth: 1020, margin: '0 auto', padding: '16px 14px 60px' }}>
 
         {/* Error */}
         {error && (
@@ -369,18 +304,15 @@ export default function SomaDashboard() {
         )}
 
         {/* Top bar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <button
             onClick={() => setView('home')}
             className="label-mid"
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px 8px 10px',
-              borderRadius: 12,
-              background: 'transparent',
-              border: '1px solid transparent',
-              cursor: 'pointer',
-              transition: 'all 0.18s ease',
+              padding: '8px 14px 8px 10px', borderRadius: 12,
+              background: 'transparent', border: '1px solid transparent',
+              cursor: 'pointer', transition: 'all 0.18s ease',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
@@ -391,66 +323,58 @@ export default function SomaDashboard() {
             Back
           </button>
 
-          <span className="heading-display" style={{ fontSize: 9, letterSpacing: '0.52em', color: 'rgba(255,255,255,0.3)' }}>
+          <span className="heading-display" style={{ fontSize: 9, letterSpacing: '0.52em', color: 'rgba(255,255,255,0.25)' }}>
             SOMA
           </span>
 
-          <span className="dot-matrix" style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)' }}>
+          <span className="dot-matrix" style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
             {currentPosition}&thinsp;/&thinsp;{totalTracks}
           </span>
         </div>
 
         {/* Session progress line */}
         {totalTracks > 0 && (
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ height: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ height: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
               <div style={{
-                height: '100%',
-                width: `${progressPct}%`,
-                background: `linear-gradient(90deg, ${sessionAccent}88, ${sessionAccent})`,
-                borderRadius: 2,
-                boxShadow: `0 0 8px ${sessionAccent}55`,
+                height: '100%', width: `${progressPct}%`,
+                background: `linear-gradient(90deg, ${sessionAccent}66, ${sessionAccent})`,
+                borderRadius: 2, boxShadow: `0 0 8px ${sessionAccent}44`,
                 transition: 'width 0.7s cubic-bezier(0.22,1,0.36,1)',
               }} />
             </div>
           </div>
         )}
 
-        {/* 2-col on desktop, 1-col on mobile */}
+        {/* 2-col on desktop */}
         <div className="session-grid">
 
           {/* ── LEFT: Now Playing ── */}
           <div
             className="glass-card"
             style={{
-              padding: '28px 26px',
-              boxShadow: `0 0 80px ${sessionAccent}0e, 0 24px 64px rgba(0,0,0,0.48)`,
-              borderColor: `${sessionAccent}18`,
+              padding: '26px 24px',
+              boxShadow: `0 0 80px ${sessionAccent}0c, 0 24px 64px rgba(0,0,0,0.44)`,
+              borderColor: `${sessionAccent}16`,
             }}
           >
             {done ? (
-              /* ── Done ── */
-              <div className="text-center scale-in" style={{ padding: '44px 0' }}>
-                <p
-                  className="heading-display"
-                  style={{ fontSize: 22, color: sessionAccent, letterSpacing: '0.2em', marginBottom: 10 }}
-                >
+              <div className="scale-in" style={{ textAlign: 'center', padding: '52px 0' }}>
+                <p className="heading-display" style={{ fontSize: 22, color: sessionAccent, letterSpacing: '0.2em', marginBottom: 10 }}>
                   Session Complete
                 </p>
-                <p className="label-dim" style={{ marginBottom: 36 }}>Your set has ended.</p>
+                <p className="label-dim" style={{ marginBottom: 40 }}>Your set has ended.</p>
                 <button
                   onClick={() => { setView('home'); setSession(null); setNowPlaying(null); setDone(false) }}
                   className="heading-display"
                   style={{
                     fontSize: 10, letterSpacing: '0.24em',
                     padding: '14px 38px', borderRadius: 14,
-                    background: `${sessionAccent}10`,
-                    border: `1px solid ${sessionAccent}32`,
-                    cursor: 'pointer',
-                    color: 'rgba(255,255,255,0.85)',
+                    background: `${sessionAccent}10`, border: `1px solid ${sessionAccent}30`,
+                    cursor: 'pointer', color: 'rgba(255,255,255,0.85)',
                     transition: 'background 0.2s ease',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = `${sessionAccent}20`)}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${sessionAccent}1e`)}
                   onMouseLeave={e => (e.currentTarget.style.background = `${sessionAccent}10`)}
                 >
                   New Session
@@ -458,93 +382,108 @@ export default function SomaDashboard() {
               </div>
 
             ) : scanning && !nowPlaying ? (
-              /* ── Scanning ── */
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '52px 0', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 0', gap: 16 }}>
                 <TransitionScanner scanning={true} label="Selecting next track" />
               </div>
 
             ) : nowPlaying ? (
-              /* ── Now Playing ── */
               <div key={nowPlaying.position} className="track-enter">
 
-                {/* Track info */}
-                <div style={{ marginBottom: 22 }}>
-                  <p className="label-dim" style={{ marginBottom: 10 }}>Now Playing</p>
-                  <h2
-                    className="font-display"
-                    style={{
-                      fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
-                      fontWeight: 300,
-                      color: 'rgba(255,255,255,0.96)',
-                      letterSpacing: '-0.015em',
-                      lineHeight: 1.12,
-                      marginBottom: 9,
-                    }}
-                  >
-                    {nowPlaying.title}
-                  </h2>
-                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.36)', fontFamily: 'DM Sans', fontWeight: 300, letterSpacing: '0.02em' }}>
-                    {nowPlaying.artist}
-                  </p>
-                </div>
-
-                {/* Metric pills */}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 22 }}>
-                  {[
-                    { label: 'BPM',    value: String(Math.round(nowPlaying.bpm)),    color: '#e8305a' },
-                    { label: 'Key',    value: (nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : '—', color: '#0fd4b8' },
-                    { label: 'Target', value: String(Math.round(nowPlaying.target_bpm)), color: '#4488ff' },
-                  ].map(m => (
-                    <div
-                      key={m.label}
+                {/* Row: Track info + BPM Knob */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 18 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="label-dim" style={{ marginBottom: 10 }}>Now Playing</p>
+                    <h2
+                      className="font-display"
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '7px 14px',
-                        borderRadius: 100,
-                        background: `${m.color}0d`,
-                        border: `1px solid ${m.color}26`,
+                        fontSize: 'clamp(1.6rem, 4.5vw, 2.4rem)',
+                        fontWeight: 300,
+                        color: 'rgba(255,255,255,0.96)',
+                        letterSpacing: '-0.015em',
+                        lineHeight: 1.12,
+                        marginBottom: 8,
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical' as const,
                       }}
                     >
-                      <span className="label-dim" style={{ fontSize: 9 }}>{m.label}</span>
-                      <span
-                        key={m.value}
-                        className="dot-matrix count-up"
-                        style={{ fontSize: 15, color: m.color, textShadow: `0 0 10px ${m.color}70` }}
-                      >
-                        {m.value}
+                      {nowPlaying.title}
+                    </h2>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.34)', fontFamily: 'DM Sans', fontWeight: 300, letterSpacing: '0.02em' }}>
+                      {nowPlaying.artist}
+                    </p>
+
+                    {/* Key + Camelot badges */}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                      {nowPlaying.camelot && nowPlaying.camelot !== 'Unknown' && (
+                        <span style={{
+                          fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+                          padding: '4px 10px', borderRadius: 8,
+                          background: 'rgba(15,212,184,0.08)', border: '1px solid rgba(15,212,184,0.2)',
+                          color: '#0fd4b8',
+                        }}>
+                          {nowPlaying.camelot}
+                        </span>
+                      )}
+                      <span style={{
+                        fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+                        padding: '4px 10px', borderRadius: 8,
+                        background: `${sessionAccent}0d`, border: `1px solid ${sessionAccent}25`,
+                        color: sessionAccent,
+                      }}>
+                        target {Math.round(nowPlaying.target_bpm)} bpm
                       </span>
                     </div>
-                  ))}
-                </div>
+                  </div>
 
-                <div className="soma-divider" style={{ marginBottom: 20 }} />
-
-                {/* Audio player */}
-                <div style={{ marginBottom: 20 }}>
-                  <AudioPlayer
-                    audioUrl={nowPlaying.audio_url}
-                    onEnded={() => handleEvent('completed')}
+                  {/* BPM Knob */}
+                  <BpmKnob
+                    bpm={Math.round(nowPlaying.bpm)}
+                    targetBpm={Math.round(nowPlaying.target_bpm)}
+                    color={sessionAccent}
                   />
                 </div>
 
-                {/* Controls: skip + star rating */}
+                {/* Frequency Visualizer */}
+                <div style={{
+                  borderRadius: 12,
+                  background: 'rgba(0,0,0,0.2)',
+                  border: `1px solid ${sessionAccent}14`,
+                  padding: '12px 14px',
+                  marginBottom: 18,
+                  overflow: 'hidden',
+                }}>
+                  <FrequencyVisualizer
+                    audioRef={audioRef}
+                    playing={isPlaying}
+                    color={sessionAccent}
+                  />
+                </div>
+
+                <div className="soma-divider" style={{ marginBottom: 18 }} />
+
+                {/* Audio player */}
+                <div style={{ marginBottom: 18 }}>
+                  <AudioPlayer
+                    audioUrl={nowPlaying.audio_url}
+                    onEnded={() => handleEvent('completed')}
+                    audioRef={audioRef}
+                    onPlayingChange={setIsPlaying}
+                  />
+                </div>
+
+                {/* Skip + Star rating */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <button
                     onClick={() => handleEvent('skipped')}
                     className="label-mid"
                     style={{
-                      padding: '12px 20px',
-                      borderRadius: 14,
+                      padding: '12px 20px', borderRadius: 14,
                       background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      fontSize: 10,
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase',
-                      fontFamily: 'DM Sans',
-                      cursor: 'pointer',
-                      flexShrink: 0,
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      fontFamily: 'DM Sans', cursor: 'pointer', flexShrink: 0,
                       transition: 'background 0.18s ease',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
@@ -553,9 +492,8 @@ export default function SomaDashboard() {
                     Skip
                   </button>
 
-                  {/* Star rating */}
                   <div
-                    style={{ display: 'flex', flex: 1, gap: 6 }}
+                    style={{ display: 'flex', flex: 1, gap: 5 }}
                     onMouseLeave={() => setHoverRating(0)}
                   >
                     {[1, 2, 3, 4, 5].map(r => (
@@ -564,16 +502,11 @@ export default function SomaDashboard() {
                         onClick={() => handleEvent('completed', r)}
                         onMouseEnter={() => setHoverRating(r)}
                         style={{
-                          flex: 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '12px 0',
-                          borderRadius: 14,
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          padding: '12px 0', borderRadius: 14,
                           background: r <= hoverRating ? `${sessionAccent}18` : `${sessionAccent}07`,
-                          border: `1px solid ${r <= hoverRating ? sessionAccent + '44' : sessionAccent + '14'}`,
-                          cursor: 'pointer',
-                          transition: 'all 0.12s ease',
+                          border: `1px solid ${r <= hoverRating ? sessionAccent + '40' : sessionAccent + '12'}`,
+                          cursor: 'pointer', transition: 'all 0.12s ease',
                         }}
                       >
                         <StarIcon filled={r <= hoverRating} color={sessionAccent} />
@@ -582,9 +515,8 @@ export default function SomaDashboard() {
                   </div>
                 </div>
 
-                {/* Scanning overlay while transitioning */}
                 {scanning && (
-                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
                     <TransitionScanner scanning={true} />
                   </div>
                 )}
@@ -594,7 +526,12 @@ export default function SomaDashboard() {
 
           {/* ── RIGHT: Context sidebar ── */}
           {session && !done && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* Queue */}
+              <div className="glass-card" style={{ padding: '18px 20px' }}>
+                <SessionQueue tracks={session.tracks} currentPosition={currentPosition} />
+              </div>
 
               {/* BPM Arc */}
               <div className="glass-card" style={{ padding: '18px 20px' }}>
@@ -622,16 +559,11 @@ export default function SomaDashboard() {
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <CamelotWheel
                       activeCode={(nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : null}
-                      size={180}
+                      size={170}
                     />
                   </div>
                 </div>
               )}
-
-              {/* Queue */}
-              <div className="glass-card" style={{ padding: '18px 20px' }}>
-                <SessionQueue tracks={session.tracks} currentPosition={currentPosition} />
-              </div>
             </div>
           )}
         </div>
