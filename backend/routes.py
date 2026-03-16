@@ -60,7 +60,6 @@ def get_arc_types():
 
 
 @router.post("/sessions")
-@limiter.limit("10/minute")
 def create_session(request: Request, req: SessionCreateRequest, db: Session = Depends(get_db)):
     """Create a new session. Plans the full arc and picks all tracks upfront."""
     if req.duration_min < 5 or req.duration_min > 480:
@@ -190,7 +189,6 @@ def get_similar(track_id: int, limit: int = 5,
     return result
 
 @router.post("/tracks/upload")
-@limiter.limit("5/minute")
 async def upload_track(
     request: Request,
     file: UploadFile = File(...),
