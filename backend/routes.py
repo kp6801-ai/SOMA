@@ -67,8 +67,8 @@ def create_session(request: Request, req: SessionCreateRequest, db: Session = De
         raise HTTPException(status_code=400, detail="duration_min must be between 5 and 480")
     try:
         result = session_service.create_session(db, req.arc_type, req.duration_min)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Session error: {type(e).__name__}: {str(e)}")
     return result
 
 
