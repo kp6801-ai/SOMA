@@ -131,43 +131,41 @@ export default function SomaDashboard() {
   /* ─── HOME ──────────────────────────────────────────────── */
   if (view === 'home') {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', zIndex: 10 }}>
+      <div style={{ position: 'relative', height: '100dvh', display: 'flex', flexDirection: 'column', zIndex: 10, overflow: 'hidden' }}>
         <div className="orb orb-pink" />
         <div className="orb orb-teal" />
         <div className="orb orb-blue" />
 
-        {/* Fixed SOMA wordmark — always on screen */}
+        {/* SOMA wordmark — always visible at top in normal flow */}
         <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0,
-          zIndex: 50,
+          flexShrink: 0,
           textAlign: 'center',
-          padding: '24px 20px 16px',
-          background: 'linear-gradient(to bottom, #06060c 70%, transparent)',
-          pointerEvents: 'none',
+          padding: '36px 20px 18px',
+          position: 'relative', zIndex: 2,
         }}>
           <h1
             className="heading-hero"
             style={{
               fontSize: 'clamp(2.8rem, 11vw, 5rem)',
-              background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 55%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              transition: 'background 0.35s ease',
+              color: homeAccent,
+              textShadow: `0 0 40px ${homeAccent}55`,
+              transition: 'color 0.35s ease, text-shadow 0.35s ease',
               lineHeight: 1,
             }}
           >
             SOMA
           </h1>
-          <p className="label-dim" style={{ marginTop: 5, letterSpacing: '0.3em', opacity: 0.6 }}>
+          <p className="label-dim" style={{ marginTop: 6, letterSpacing: '0.3em', opacity: 0.55 }}>
             Generative DJ Intelligence
           </p>
         </div>
 
+        {/* Scrollable content below SOMA */}
         <div style={{
+          flex: 1, overflowY: 'auto', position: 'relative', zIndex: 2,
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          padding: '160px 20px 80px', width: '100%', maxWidth: 480, margin: '0 auto',
+          padding: '0 20px 60px', width: '100%', maxWidth: 480, margin: '0 auto',
+          boxSizing: 'border-box',
         }}>
 
           {/* Error banner */}
