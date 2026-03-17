@@ -88,24 +88,48 @@ def _timbral_similarity(a, b) -> float:
     return 0.5  # neutral when no timbral data
 
 
-def _learned_score(db: Session, track_a_id: int, track_b_id: int) -> float:
+def _learned_score(db: Session, track_a_id: int, track_b_id: int,
+                   track_a=None, track_b=None) -> float:
     """
-    Phase 5: Query transition_scores table for DJ-learned compatibility.
-    Returns 0.0-1.0 based on how many real DJs have played this pair.
+    Phase 5: DJ-learned transition quality.
+
+    Priority order:
+    1. TransitionScore lookup (direct DJ evidence — highest weight)
+    2. LightGBM model prediction (feature-based, works for any pair)
+    3. Neutral fallback 0.5
     """
+    # Check for direct DJ evidence first
     ts = db.query(TransitionScore).filter(
         ((TransitionScore.track_a_id == track_a_id) & (TransitionScore.track_b_id == track_b_id)) |
         ((TransitionScore.track_a_id == track_b_id) & (TransitionScore.track_b_id == track_a_id))
     ).first()
 
-    if not ts:
-        return 0.5  # neutral — no data
+    if ts:
+        confidence = min(ts.confidence or 0.5, 1.0)
+        play_boost = min(ts.times_played / 5.0, 1.0)
+        dj_score = 0.5 + (0.5 * confidence * play_boost)
+    else:
+        dj_score = None
 
-    # Scale by confidence and times played
-    # 1 DJ played it = slight boost, 5+ = strong signal
-    confidence = min(ts.confidence or 0.5, 1.0)
-    play_boost = min(ts.times_played / 5.0, 1.0)
-    return 0.5 + (0.5 * confidence * play_boost)
+    # LightGBM model score (if model is loaded and track objects provided)
+    ml_score = None
+    if track_a is not None and track_b is not None:
+        try:
+            from transition_model import get_model
+            model = get_model()
+            if model.is_loaded():
+                ml_score = model.predict(track_a, track_b)
+        except Exception:
+            pass
+
+    if dj_score is not None and ml_score is not None:
+        # Blend: DJ evidence 70%, ML prediction 30%
+        return 0.7 * dj_score + 0.3 * ml_score
+    if dj_score is not None:
+        return dj_score
+    if ml_score is not None:
+        return ml_score
+    return 0.5  # neutral — no data
 
 
 def score_transition(db: Session, track_a_id: int, track_b_id: int,
@@ -189,8 +213,8 @@ def score_transition(db: Session, track_a_id: int, track_b_id: int,
     else:
         timbral_label = "Contrasting timbre"
 
-    # Phase 5: Learned DJ transition score
-    learned = _learned_score(db, track_a_id, track_b_id)
+    # Phase 5: Learned DJ transition score (DJ evidence + ML model)
+    learned = _learned_score(db, track_a_id, track_b_id, track_a=a, track_b=b)
     learned_label = "No DJ data"
     if learned > 0.75:
         learned_label = "DJ-proven transition"

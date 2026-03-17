@@ -11,6 +11,7 @@ fastapi==0.135.1
 h11==0.16.0
 idna==3.11
 joblib==1.5.3
+lightgbm>=4.0,<5
 jsonpatch==1.33
 jsonpointer==3.0.0
 numpy==2.4.2
