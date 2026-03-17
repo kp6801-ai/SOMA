@@ -322,9 +322,20 @@ export default function SomaDashboard() {
             Back
           </button>
 
-          <span className="heading-display" style={{ fontSize: 9, letterSpacing: '0.52em', color: 'rgba(255,255,255,0.25)' }}>
+          <h1
+            className="heading-hero"
+            style={{
+              fontSize: 'clamp(2rem, 6vw, 3.2rem)',
+              background: `linear-gradient(135deg, ${sessionAccent} 0%, rgba(255,255,255,0.92) 60%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              transition: 'background 0.5s ease',
+              lineHeight: 1,
+            }}
+          >
             SOMA
-          </span>
+          </h1>
 
           <span className="dot-matrix" style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
             {currentPosition}&thinsp;/&thinsp;{totalTracks}
