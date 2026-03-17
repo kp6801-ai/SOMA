@@ -136,29 +136,39 @@ export default function SomaDashboard() {
         <div className="orb orb-teal" />
         <div className="orb orb-blue" />
 
+        {/* Sticky SOMA wordmark — always visible while selecting routines */}
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          textAlign: 'center',
+          padding: '28px 20px 18px',
+          background: 'linear-gradient(to bottom, #06060c 60%, transparent)',
+          pointerEvents: 'none',
+        }}>
+          <h1
+            className="heading-hero fade-up"
+            style={{
+              fontSize: 'clamp(3rem, 12vw, 5.5rem)',
+              background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 55%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              transition: 'background 0.4s ease',
+              lineHeight: 1,
+            }}
+          >
+            SOMA
+          </h1>
+          <p className="label-dim" style={{ marginTop: 6, letterSpacing: '0.3em', opacity: 0.7 }}>
+            Generative DJ Intelligence
+          </p>
+        </div>
+
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          padding: '60px 20px 80px', width: '100%', maxWidth: 480, margin: '0 auto',
+          padding: '0 20px 80px', width: '100%', maxWidth: 480, margin: '0 auto',
         }}>
-          {/* Wordmark */}
-          <div className="fade-up" style={{ textAlign: 'center', marginBottom: 40 }}>
-            <h1
-              className="heading-hero"
-              style={{
-                fontSize: 'clamp(4rem, 14vw, 6.5rem)',
-                background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 55%)`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                transition: 'background 0.5s ease',
-              }}
-            >
-              SOMA
-            </h1>
-            <p className="label-dim" style={{ marginTop: 8, letterSpacing: '0.3em' }}>
-              Generative DJ Intelligence
-            </p>
-          </div>
 
           {/* Error banner */}
           {error && (
