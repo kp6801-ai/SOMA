@@ -1,209 +1,122 @@
 """
-fingerprint_tracks.py — Identify tracks within DJ sets using AcoustID + Chromaprint.
+fingerprint_tracks.py — Identify tracks within DJ sets using Shazam.
+
+Uses shazamio (unofficial Shazam API) — free, no key needed, recognizes remixes.
 
 Usage:
-  python fingerprint_tracks.py --manifest ./dj_sets/manifest.json
-  python fingerprint_tracks.py --audio-file ./dj_sets/abc123.mp3
+  python3 fingerprint_tracks.py --manifest ./dj_sets/manifest.json
+  python3 fingerprint_tracks.py --audio-file ./dj_sets/abc123.mp3
 
 Requires:
-  pip install requests pydub
-  fpcalc binary: https://acoustid.org/chromaprint (or: brew install chromaprint)
-  ACOUSTID_API_KEY env var (free at acoustid.org — just needs an app name)
+  pip install shazamio pydub
+  ffmpeg (brew install ffmpeg)
 """
 
 import argparse
+import asyncio
 import json
 import logging
-import os
-import shutil
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-import requests
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-ACOUSTID_URL = "https://api.acoustid.org/v2/lookup"
-CHUNK_SECONDS = 180      # fingerprint every 3 minutes
-OVERLAP_SECONDS = 30     # overlap between chunks
-MIN_CONFIDENCE = 0.5     # discard low-confidence matches
+CHUNK_SECONDS = 60       # sample 60s per chunk (Shazam works well with 1 min)
+STEP_SECONDS = 180       # sample every 3 minutes through the set
+MIN_CONFIDENCE = 0.4
 
 
-def check_fpcalc() -> str:
-    """Find fpcalc binary or exit with instructions."""
-    path = shutil.which("fpcalc")
-    if path:
-        return path
-    log.error(
-        "fpcalc not found. Install Chromaprint:\n"
-        "  macOS:  brew install chromaprint\n"
-        "  Ubuntu: apt-get install libchromaprint-tools\n"
-        "  Or download from: https://acoustid.org/chromaprint"
+def check_deps():
+    try:
+        import shazamio  # noqa
+    except ImportError:
+        log.error("Install shazamio: pip3 install shazamio")
+        sys.exit(1)
+    result = subprocess.run(["which", "ffmpeg"], capture_output=True)
+    if result.returncode != 0:
+        log.error("ffmpeg not found: brew install ffmpeg")
+        sys.exit(1)
+
+
+def get_duration(audio_path: str) -> float:
+    result = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", audio_path],
+        capture_output=True, text=True
     )
-    sys.exit(1)
-
-
-def split_audio(audio_path: str, chunk_sec: int, overlap_sec: int, tmp_dir: str) -> list[dict]:
-    """Split mp3 into overlapping chunks using ffmpeg. Returns list of {path, start_sec}."""
     try:
-        result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", audio_path],
-            capture_output=True, text=True, check=True
-        )
-        duration = float(json.loads(result.stdout)["format"]["duration"])
-    except Exception as e:
-        log.error(f"Could not probe {audio_path}: {e}")
-        return []
-
-    chunks = []
-    step = chunk_sec - overlap_sec
-    start = 0
-
-    while start < duration:
-        end = min(start + chunk_sec, duration)
-        chunk_path = os.path.join(tmp_dir, f"chunk_{int(start):06d}.mp3")
-
-        ret = subprocess.run([
-            "ffmpeg", "-y", "-ss", str(start), "-t", str(chunk_sec),
-            "-i", audio_path, "-vn", "-ar", "44100", "-ac", "1",
-            "-b:a", "128k", chunk_path
-        ], capture_output=True)
-
-        if ret.returncode == 0 and Path(chunk_path).exists():
-            chunks.append({"path": chunk_path, "start_sec": start})
-
-        start += step
-        if end >= duration:
-            break
-
-    return chunks
+        return float(json.loads(result.stdout)["format"]["duration"])
+    except Exception:
+        return 0.0
 
 
-def fingerprint_chunk(fpcalc: str, chunk_path: str) -> dict | None:
-    """Run fpcalc and return {fingerprint, duration}."""
+def extract_chunk(audio_path: str, start_sec: float, duration: float, out_path: str) -> bool:
+    ret = subprocess.run([
+        "ffmpeg", "-y", "-ss", str(start_sec), "-t", str(duration),
+        "-i", audio_path, "-vn", "-ar", "44100", "-ac", "1",
+        "-b:a", "128k", out_path
+    ], capture_output=True)
+    return ret.returncode == 0 and Path(out_path).exists()
+
+
+async def shazam_chunk(chunk_path: str) -> dict | None:
+    from shazamio import Shazam
+    shazam = Shazam()
     try:
-        result = subprocess.run(
-            [fpcalc, "-json", chunk_path],
-            capture_output=True, text=True, timeout=30
-        )
-        data = json.loads(result.stdout)
-        return {"fingerprint": data["fingerprint"], "duration": data["duration"]}
+        result = await shazam.recognize(chunk_path)
+        track = result.get("track")
+        if not track:
+            return None
+        return {
+            "title": track.get("title", "Unknown"),
+            "artist": track.get("subtitle", "Unknown"),
+            "shazam_id": track.get("key", ""),
+            "confidence": 0.9,  # Shazam doesn't return confidence scores; assume high
+        }
     except Exception as e:
-        log.debug(f"fpcalc error on {chunk_path}: {e}")
+        log.debug(f"Shazam error: {e}")
         return None
 
 
-def lookup_acoustid(api_key: str, fingerprint: str, duration: float) -> list[dict]:
-    """Query AcoustID API. Returns list of {title, artist, recording_id, score}."""
-    try:
-        resp = requests.post(ACOUSTID_URL, data={
-            "client": api_key,
-            "fingerprint": fingerprint,
-            "duration": int(duration),
-            "meta": "recordings",
-        }, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        log.debug(f"AcoustID API error: {e}")
-        return []
-
-    matches = []
-    for result in data.get("results", []):
-        score = result.get("score", 0)
-        if score < MIN_CONFIDENCE:
-            continue
-        for rec in result.get("recordings", []):
-            title = rec.get("title", "Unknown")
-            artists = rec.get("artists", [])
-            artist = artists[0]["name"] if artists else "Unknown"
-            matches.append({
-                "title": title,
-                "artist": artist,
-                "recording_id": rec.get("id", ""),
-                "score": score,
-            })
-
-    # Return best match only
-    matches.sort(key=lambda x: x["score"], reverse=True)
-    return matches[:1]
-
-
-def deduplicate_tracks(raw_matches: list[dict]) -> list[dict]:
-    """
-    Merge consecutive chunks that matched the same track.
-    raw_matches: [{title, artist, recording_id, score, start_sec}, ...]
-    Returns: [{title, artist, recording_id, confidence, start_sec, end_sec}, ...]
-    """
-    if not raw_matches:
-        return []
-
-    merged = []
-    current = dict(raw_matches[0])
-    current["end_sec"] = current["start_sec"] + CHUNK_SECONDS
-    current["confidence"] = current.pop("score")
-    current["hit_count"] = 1
-
-    for m in raw_matches[1:]:
-        same = (
-            m["title"] == current["title"] and
-            m["artist"] == current["artist"]
-        )
-        if same:
-            current["end_sec"] = m["start_sec"] + CHUNK_SECONDS
-            current["confidence"] = max(current["confidence"], m["score"])
-            current["hit_count"] += 1
-        else:
-            merged.append(current)
-            current = dict(m)
-            current["end_sec"] = current["start_sec"] + CHUNK_SECONDS
-            current["confidence"] = current.pop("score")
-            current["hit_count"] = 1
-
-    merged.append(current)
-    return merged
-
-
-def fingerprint_set(audio_path: str, api_key: str, fpcalc: str, output_dir: Path) -> list[dict]:
-    """Full pipeline: split → fingerprint → lookup → deduplicate → save."""
+async def fingerprint_set_async(audio_path: str, output_dir: Path) -> list[dict]:
     video_id = Path(audio_path).stem
     out_file = output_dir / f"{video_id}_tracks.json"
 
     if out_file.exists():
-        log.info(f"Already fingerprinted: {video_id}, loading cached result")
+        log.info(f"Already fingerprinted: {video_id}")
         with open(out_file) as f:
             return json.load(f)
 
-    log.info(f"Fingerprinting: {audio_path}")
+    duration = get_duration(audio_path)
+    if duration == 0:
+        log.warning(f"Could not read duration: {audio_path}")
+        return []
+
+    log.info(f"Fingerprinting: {Path(audio_path).name} ({duration/3600:.1f}h)")
+
     raw_matches = []
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        chunks = split_audio(audio_path, CHUNK_SECONDS, OVERLAP_SECONDS, tmp_dir)
-        log.info(f"  {len(chunks)} chunks to fingerprint")
+        start = 0.0
+        while start < duration:
+            chunk_path = f"{tmp_dir}/chunk_{int(start):06d}.mp3"
+            if extract_chunk(audio_path, start, CHUNK_SECONDS, chunk_path):
+                match = await shazam_chunk(chunk_path)
+                if match:
+                    match["start_sec"] = start
+                    raw_matches.append(match)
+                    log.info(f"  [{int(start)//60:3d}m] {match['artist']} - {match['title']}")
+                else:
+                    log.debug(f"  [{int(start)//60:3d}m] No match")
 
-        for i, chunk in enumerate(chunks):
-            fp_data = fingerprint_chunk(fpcalc, chunk["path"])
-            if not fp_data:
-                continue
-
-            matches = lookup_acoustid(api_key, fp_data["fingerprint"], fp_data["duration"])
-            if matches:
-                m = matches[0]
-                m["start_sec"] = chunk["start_sec"]
-                raw_matches.append(m)
-                log.info(f"  [{chunk['start_sec']//60:3d}m] {m['artist']} - {m['title']} ({m['score']:.2f})")
-            else:
-                log.debug(f"  [{chunk['start_sec']//60:3d}m] No match")
-
-            # Be polite to AcoustID API (free tier)
-            time.sleep(0.34)  # ~3 req/sec max
+            start += STEP_SECONDS
+            await asyncio.sleep(0.5)  # be polite
 
     tracks = deduplicate_tracks(raw_matches)
-    log.info(f"  Identified {len(tracks)} distinct tracks")
+    log.info(f"  → {len(tracks)} distinct tracks identified")
 
     with open(out_file, "w") as f:
         json.dump(tracks, f, indent=2)
@@ -211,8 +124,25 @@ def fingerprint_set(audio_path: str, api_key: str, fpcalc: str, output_dir: Path
     return tracks
 
 
+def deduplicate_tracks(raw: list[dict]) -> list[dict]:
+    if not raw:
+        return []
+    merged = []
+    cur = {**raw[0], "end_sec": raw[0]["start_sec"] + CHUNK_SECONDS, "hit_count": 1}
+
+    for m in raw[1:]:
+        same = (m["title"] == cur["title"] and m["artist"] == cur["artist"])
+        if same:
+            cur["end_sec"] = m["start_sec"] + CHUNK_SECONDS
+            cur["hit_count"] += 1
+        else:
+            merged.append(cur)
+            cur = {**m, "end_sec": m["start_sec"] + CHUNK_SECONDS, "hit_count": 1}
+    merged.append(cur)
+    return merged
+
+
 def build_transitions(all_sets: list[dict]) -> list[dict]:
-    """Build consecutive track pairs (A→B transitions) from all sets."""
     transitions = []
     for s in all_sets:
         tracks = s["tracks"]
@@ -224,37 +154,24 @@ def build_transitions(all_sets: list[dict]) -> list[dict]:
                 "video_id": s["video_id"],
                 "track_a_title": a["title"],
                 "track_a_artist": a["artist"],
-                "track_a_recording_id": a.get("recording_id", ""),
                 "track_a_start_sec": a["start_sec"],
                 "track_b_title": b["title"],
                 "track_b_artist": b["artist"],
-                "track_b_recording_id": b.get("recording_id", ""),
                 "track_b_start_sec": b["start_sec"],
             })
     return transitions
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Fingerprint DJ sets to identify tracks")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--manifest", help="manifest.json from scrape_youtube_sets.py")
-    group.add_argument("--audio-file", help="Single MP3 file to fingerprint")
-    parser.add_argument("--output-dir", default=None, help="Where to save track JSON files (defaults to manifest dir)")
-    args = parser.parse_args()
-
-    api_key = os.getenv("ACOUSTID_API_KEY")
-    if not api_key:
-        log.error("Set ACOUSTID_API_KEY env var (free at acoustid.org)")
-        sys.exit(1)
-
-    fpcalc = check_fpcalc()
-    log.info(f"Using fpcalc at: {fpcalc}")
+async def main_async(args):
+    check_deps()
 
     if args.audio_file:
-        audio_files = [{"video_id": Path(args.audio_file).stem,
-                        "local_path": args.audio_file,
-                        "title": Path(args.audio_file).stem,
-                        "channel": "Unknown"}]
+        audio_files = [{
+            "video_id": Path(args.audio_file).stem,
+            "local_path": args.audio_file,
+            "title": Path(args.audio_file).stem,
+            "channel": "Unknown",
+        }]
         output_dir = Path(args.output_dir or Path(args.audio_file).parent)
     else:
         with open(args.manifest) as f:
@@ -265,11 +182,13 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     all_sets = []
 
-    for v in audio_files:
-        if not v.get("local_path") or not Path(v["local_path"]).exists():
-            log.warning(f"Audio file not found: {v.get('local_path')}")
+    for i, v in enumerate(audio_files):
+        path = v.get("local_path", "")
+        if not Path(path).exists():
+            log.warning(f"File not found: {path}")
             continue
-        tracks = fingerprint_set(v["local_path"], api_key, fpcalc, output_dir)
+        log.info(f"\n[{i+1}/{len(audio_files)}] {v.get('title','')[:60]}")
+        tracks = await fingerprint_set_async(path, output_dir)
         all_sets.append({**v, "tracks": tracks})
 
     transitions = build_transitions(all_sets)
@@ -277,11 +196,26 @@ def main():
     with open(out_file, "w") as f:
         json.dump(transitions, f, indent=2)
 
+    total_tracks = sum(len(s["tracks"]) for s in all_sets)
     log.info(f"\n{'='*50}")
-    log.info(f"Sets processed:     {len(all_sets)}")
-    log.info(f"Total transitions:  {len(transitions)}")
-    log.info(f"Saved to:           {out_file}")
-    log.info(f"\nNext step:\n  python build_training_pairs.py --transitions-file {out_file}")
+    log.info(f"Sets processed:      {len(all_sets)}")
+    log.info(f"Tracks identified:   {total_tracks}")
+    log.info(f"Transitions found:   {len(transitions)}")
+    log.info(f"Saved to:            {out_file}")
+    if len(transitions) > 0:
+        log.info(f"\nNext step:\n  python3 scripts/build_training_pairs.py --transitions-file {out_file}")
+    else:
+        log.warning("No transitions found — check that ffmpeg is working and sets are > 30 min")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Fingerprint DJ sets via Shazam")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--manifest", help="manifest.json from scrape_youtube_sets.py")
+    group.add_argument("--audio-file", help="Single MP3 to fingerprint")
+    parser.add_argument("--output-dir", default=None)
+    args = parser.parse_args()
+    asyncio.run(main_async(args))
 
 
 if __name__ == "__main__":

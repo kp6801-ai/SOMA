@@ -136,38 +136,38 @@ export default function SomaDashboard() {
         <div className="orb orb-teal" />
         <div className="orb orb-blue" />
 
-        {/* Sticky SOMA wordmark — always visible while selecting routines */}
+        {/* Fixed SOMA wordmark — always on screen */}
         <div style={{
-          position: 'sticky',
-          top: 0,
+          position: 'fixed',
+          top: 0, left: 0, right: 0,
           zIndex: 50,
           textAlign: 'center',
-          padding: '28px 20px 18px',
-          background: 'linear-gradient(to bottom, #06060c 60%, transparent)',
+          padding: '24px 20px 16px',
+          background: 'linear-gradient(to bottom, #06060c 70%, transparent)',
           pointerEvents: 'none',
         }}>
           <h1
-            className="heading-hero fade-up"
+            className="heading-hero"
             style={{
-              fontSize: 'clamp(3rem, 12vw, 5.5rem)',
+              fontSize: 'clamp(2.8rem, 11vw, 5rem)',
               background: `linear-gradient(135deg, ${homeAccent} 0%, rgba(255,255,255,0.92) 55%)`,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-              transition: 'background 0.4s ease',
+              transition: 'background 0.35s ease',
               lineHeight: 1,
             }}
           >
             SOMA
           </h1>
-          <p className="label-dim" style={{ marginTop: 6, letterSpacing: '0.3em', opacity: 0.7 }}>
+          <p className="label-dim" style={{ marginTop: 5, letterSpacing: '0.3em', opacity: 0.6 }}>
             Generative DJ Intelligence
           </p>
         </div>
 
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          padding: '0 20px 80px', width: '100%', maxWidth: 480, margin: '0 auto',
+          padding: '160px 20px 80px', width: '100%', maxWidth: 480, margin: '0 auto',
         }}>
 
           {/* Error banner */}
