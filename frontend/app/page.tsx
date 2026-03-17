@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, ArcType, Session, NowPlaying } from '@/lib/api'
-import CamelotWheel from '@/components/CamelotWheel'
 import EnergyArc from '@/components/EnergyArc'
 import TransitionScanner from '@/components/TransitionScanner'
 import AudioPlayer from '@/components/AudioPlayer'
@@ -414,18 +413,8 @@ export default function SomaDashboard() {
                       {nowPlaying.artist}
                     </p>
 
-                    {/* Key + Camelot badges */}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-                      {nowPlaying.camelot && nowPlaying.camelot !== 'Unknown' && (
-                        <span style={{
-                          fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
-                          padding: '4px 10px', borderRadius: 8,
-                          background: 'rgba(15,212,184,0.08)', border: '1px solid rgba(15,212,184,0.2)',
-                          color: '#0fd4b8',
-                        }}>
-                          {nowPlaying.camelot}
-                        </span>
-                      )}
+                    {/* Target BPM badge */}
+                    <div style={{ marginTop: 12 }}>
                       <span style={{
                         fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
                         padding: '4px 10px', borderRadius: 8,
@@ -552,18 +541,6 @@ export default function SomaDashboard() {
                 </div>
               </div>
 
-              {/* Camelot Wheel */}
-              {nowPlaying && (
-                <div className="glass-card" style={{ padding: '18px 20px' }}>
-                  <p className="label-dim" style={{ marginBottom: 14 }}>Camelot Wheel</p>
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <CamelotWheel
-                      activeCode={(nowPlaying.camelot && nowPlaying.camelot !== 'Unknown') ? nowPlaying.camelot : null}
-                      size={170}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>

@@ -8,164 +8,128 @@ interface Props {
   color: string
 }
 
-// Parse a hex or rgb color string into [r, g, b] components
 function parseColor(color: string): [number, number, number] {
-  // Try hex
   const hex = color.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
-  if (hex) {
-    return [parseInt(hex[1], 16), parseInt(hex[2], 16), parseInt(hex[3], 16)]
-  }
-  // Try rgb(r, g, b)
+  if (hex) return [parseInt(hex[1], 16), parseInt(hex[2], 16), parseInt(hex[3], 16)]
   const rgb = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
-  if (rgb) {
-    return [parseInt(rgb[1]), parseInt(rgb[2]), parseInt(rgb[3])]
-  }
-  // Fallback: white
+  if (rgb) return [parseInt(rgb[1]), parseInt(rgb[2]), parseInt(rgb[3])]
   return [255, 255, 255]
 }
 
 export default function FrequencyVisualizer({ audioRef, playing, color }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const contextRef = useRef<AudioContext | null>(null)
+  const canvasRef   = useRef<HTMLCanvasElement>(null)
+  const ctxRef      = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
-  const animFrameRef = useRef<number | null>(null)
-  const decayDataRef = useRef<Float32Array | null>(null)
+  const sourceRef   = useRef<MediaElementAudioSourceNode | null>(null)
+  const rafRef      = useRef<number | null>(null)
+  const decayRef    = useRef<Float32Array | null>(null)
 
-  // Set up AudioContext and AnalyserNode once the audio element is available
+  // ── Set up Web Audio graph (runs when playing first becomes true) ──────────
   useEffect(() => {
+    if (!playing) return
     const audio = audioRef.current
     if (!audio) return
-
-    // Check for Web Audio API support
-    if (typeof window === 'undefined' || !('AudioContext' in window || 'webkitAudioContext' in window)) {
+    if (ctxRef.current) {
+      // Already set up — just resume if suspended
+      if (ctxRef.current.state === 'suspended') ctxRef.current.resume().catch(() => {})
       return
     }
 
-    // Only create the context once per audio element
-    if (contextRef.current) return
+    const AudioCtx =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
 
     try {
-      const AudioCtxClass =
-        window.AudioContext ||
-        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-
-      if (!AudioCtxClass) return
-
-      const ctx = new AudioCtxClass()
+      const ctx      = new AudioCtx()
       const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      analyser.smoothingTimeConstant = 0.8
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.82
 
       const source = ctx.createMediaElementSource(audio)
       source.connect(analyser)
       analyser.connect(ctx.destination)
 
-      contextRef.current = ctx
+      ctxRef.current      = ctx
       analyserRef.current = analyser
-      sourceRef.current = source
+      sourceRef.current   = source
+      decayRef.current    = new Float32Array(analyser.frequencyBinCount)
 
-      // Initialize decay buffer
-      decayDataRef.current = new Float32Array(analyser.frequencyBinCount)
-    } catch (err) {
-      // Graceful degradation — visualizer won't render but audio still works
-      console.warn('FrequencyVisualizer: Web Audio API setup failed', err)
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+    } catch (e) {
+      console.warn('FrequencyVisualizer setup failed:', e)
     }
 
     return () => {
-      if (animFrameRef.current !== null) {
-        cancelAnimationFrame(animFrameRef.current)
-        animFrameRef.current = null
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
       try {
         sourceRef.current?.disconnect()
         analyserRef.current?.disconnect()
-        contextRef.current?.close()
-      } catch {
-        // ignore cleanup errors
-      }
-      contextRef.current = null
-      analyserRef.current = null
-      sourceRef.current = null
+        ctxRef.current?.close()
+      } catch {}
+      ctxRef.current = analyserRef.current = sourceRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioRef])
-
-  // Resume AudioContext on first play (browsers require user gesture)
-  useEffect(() => {
-    if (playing && contextRef.current?.state === 'suspended') {
-      contextRef.current.resume().catch(() => {})
-    }
   }, [playing])
 
-  // Animation loop
+  // ── Draw loop ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
-    const analyser = analyserRef.current
     if (!canvas) return
 
     const [r, g, b] = parseColor(color)
-    const binCount = analyser ? analyser.frequencyBinCount : 128
-    const byteData = new Uint8Array(binCount)
-
-    if (!decayDataRef.current || decayDataRef.current.length !== binCount) {
-      decayDataRef.current = new Float32Array(binCount)
-    }
-    const decayData = decayDataRef.current
-
-    // Approximate sample rate for frequency-to-bin mapping (default 44100)
-    const sampleRate = contextRef.current?.sampleRate ?? 44100
-    const nyquist = sampleRate / 2
-    const hzPerBin = nyquist / binCount
 
     function draw() {
-      animFrameRef.current = requestAnimationFrame(draw)
-
+      rafRef.current = requestAnimationFrame(draw)
       const ctx2d = canvas!.getContext('2d')
       if (!ctx2d) return
 
       const W = canvas!.width
       const H = canvas!.height
-
       ctx2d.clearRect(0, 0, W, H)
 
+      const analyser = analyserRef.current
+      const decay    = decayRef.current
+
+      const binCount = analyser ? analyser.frequencyBinCount : 64
+      if (!decay || decay.length !== binCount) {
+        decayRef.current = new Float32Array(binCount)
+        return
+      }
+
       if (analyser && playing) {
+        const byteData = new Uint8Array(binCount)
         analyser.getByteFrequencyData(byteData)
-        for (let i = 0; i < binCount; i++) {
-          decayData[i] = byteData[i]
-        }
+        for (let i = 0; i < binCount; i++) decay[i] = byteData[i]
       } else {
-        // Decay toward zero when paused/stopped
+        // Decay bars when paused
         for (let i = 0; i < binCount; i++) {
-          decayData[i] *= 0.92
-          if (decayData[i] < 0.5) decayData[i] = 0
+          decay[i] *= 0.88
+          if (decay[i] < 0.5) decay[i] = 0
         }
       }
 
       const barW = 3
-      const gap = 2
+      const gap  = 2
       const step = barW + gap
       const numBars = Math.floor(W / step)
+      const sampleRate = ctxRef.current?.sampleRate ?? 44100
+      const hzPerBin = (sampleRate / 2) / binCount
 
       for (let i = 0; i < numBars; i++) {
-        // Map bar index to frequency bin
         const binIndex = Math.floor((i / numBars) * binCount)
-        const magnitude = decayData[binIndex] / 255 // 0..1
+        const mag = decay[binIndex] / 255
 
-        const barH = Math.max(1, magnitude * H)
-        const x = i * step
+        const barH  = Math.max(2, mag * (H - 4))
+        const x     = i * step
+        const y     = H - barH
 
-        // Glow boost for mid frequencies (100–4000 Hz)
         const hz = binIndex * hzPerBin
-        const isMid = hz >= 100 && hz <= 4000
-        const glowBoost = isMid ? 1.0 : 0.55
-        const opacity = Math.min(1, magnitude * glowBoost + 0.05)
+        const isMid = hz >= 80 && hz <= 5000
+        const opacity = Math.min(1, mag * (isMid ? 1.0 : 0.5) + 0.04)
 
-        const y = H - barH
-
-        // Draw bar with rounded top
+        const radius = Math.min(barW / 2, 2)
         ctx2d.beginPath()
-        const radius = Math.min(barW / 2, barH / 2, 2)
         ctx2d.moveTo(x + radius, y)
         ctx2d.lineTo(x + barW - radius, y)
         ctx2d.quadraticCurveTo(x + barW, y, x + barW, y + radius)
@@ -178,52 +142,36 @@ export default function FrequencyVisualizer({ audioRef, playing, color }: Props)
         ctx2d.fillStyle = `rgba(${r},${g},${b},${opacity.toFixed(3)})`
         ctx2d.fill()
 
-        // Subtle glow for mid frequencies
-        if (isMid && magnitude > 0.3) {
-          ctx2d.shadowBlur = 6
-          ctx2d.shadowColor = `rgba(${r},${g},${b},${(magnitude * 0.6).toFixed(3)})`
+        if (isMid && mag > 0.35) {
+          ctx2d.shadowBlur  = 8
+          ctx2d.shadowColor = `rgba(${r},${g},${b},${(mag * 0.55).toFixed(3)})`
           ctx2d.fill()
-          ctx2d.shadowBlur = 0
+          ctx2d.shadowBlur  = 0
         }
       }
     }
 
     draw()
-
-    return () => {
-      if (animFrameRef.current !== null) {
-        cancelAnimationFrame(animFrameRef.current)
-        animFrameRef.current = null
-      }
-    }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [playing, color])
 
-  // Keep canvas width in sync with container
+  // ── Keep canvas pixel-width in sync with container ────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        canvas.width = entry.contentRect.width
-      }
+      for (const e of entries) canvas.width = e.contentRect.width
     })
     ro.observe(canvas.parentElement || canvas)
-    // Set initial size
-    if (canvas.parentElement) {
-      canvas.width = canvas.parentElement.offsetWidth
-    }
+    if (canvas.parentElement) canvas.width = canvas.parentElement.offsetWidth
     return () => ro.disconnect()
   }, [])
 
   return (
     <canvas
       ref={canvasRef}
-      height={80}
-      style={{
-        width: '100%',
-        height: '80px',
-        display: 'block',
-      }}
+      height={72}
+      style={{ width: '100%', height: 72, display: 'block' }}
     />
   )
 }
