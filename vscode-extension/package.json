@@ -1,0 +1,135 @@
+{
+  "name": "soma-dj",
+  "displayName": "SOMA — Generative DJ Intelligence",
+  "description": "Browse your track library, get mix recommendations, score transitions, and run DJ sessions powered by the SOMA API.",
+  "version": "0.1.0",
+  "publisher": "soma",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "icon": "media/icon.png",
+  "contributes": {
+    "configuration": {
+      "title": "SOMA",
+      "properties": {
+        "soma.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8000/api",
+          "description": "Base URL for the SOMA backend API."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "soma",
+          "title": "SOMA",
+          "icon": "media/soma.svg"
+        }
+      ]
+    },
+    "views": {
+      "soma": [
+        {
+          "id": "somaTracks",
+          "name": "Tracks"
+        },
+        {
+          "id": "somaMoods",
+          "name": "Moods & Subgenres"
+        },
+        {
+          "id": "somaSessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "soma.refreshTracks",
+        "title": "SOMA: Refresh Track Library",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "soma.recommendFromTrack",
+        "title": "SOMA: Find Similar Tracks"
+      },
+      {
+        "command": "soma.scoreTransition",
+        "title": "SOMA: Score Transition Between Two Tracks"
+      },
+      {
+        "command": "soma.showTrackDetails",
+        "title": "SOMA: Show Track Details"
+      },
+      {
+        "command": "soma.compatibleKeys",
+        "title": "SOMA: Show Compatible Camelot Keys"
+      },
+      {
+        "command": "soma.startSession",
+        "title": "SOMA: Start DJ Session"
+      },
+      {
+        "command": "soma.browseByMood",
+        "title": "SOMA: Browse Tracks by Mood"
+      },
+      {
+        "command": "soma.bpmJourney",
+        "title": "SOMA: Plan BPM Journey"
+      },
+      {
+        "command": "soma.findBridge",
+        "title": "SOMA: Find Bridge Tracks"
+      },
+      {
+        "command": "soma.digCrate",
+        "title": "SOMA: Dig Crate (Search Tracks)"
+      },
+      {
+        "command": "soma.setApiUrl",
+        "title": "SOMA: Set API URL"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "soma.refreshTracks",
+          "when": "view == somaTracks",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "soma.recommendFromTrack",
+          "when": "view == somaTracks && viewItem == track",
+          "group": "inline"
+        },
+        {
+          "command": "soma.showTrackDetails",
+          "when": "view == somaTracks && viewItem == track"
+        },
+        {
+          "command": "soma.compatibleKeys",
+          "when": "view == somaTracks && viewItem == track"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
