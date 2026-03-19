@@ -21,18 +21,18 @@ export default function TransitionScanner({ scanning, label }: Props) {
         <circle
           cx={cx} cy={cx} r={r}
           fill="none"
-          stroke={scanning ? '#4488ff' : 'rgba(68,136,255,0.3)'}
+          stroke={scanning ? '#00eefc' : 'rgba(0,238,252,0.3)'}
           strokeWidth={1.5}
           strokeDasharray="8 6"
           strokeLinecap="round"
           className={scanning ? 'scanner-ring' : ''}
-          style={{ filter: scanning ? 'drop-shadow(0 0 4px #4488ff)' : 'none' }}
+          style={{ filter: scanning ? 'drop-shadow(0 0 4px #00eefc)' : 'none' }}
         />
 
         {/* Inner pulse dot */}
         <circle
           cx={cx} cy={cx} r={4}
-          fill={scanning ? '#4488ff' : 'rgba(68,136,255,0.3)'}
+          fill={scanning ? '#00eefc' : 'rgba(0,238,252,0.3)'}
           className={scanning ? 'pulse-ring' : ''}
         />
       </svg>

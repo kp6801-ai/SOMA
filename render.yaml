@@ -12,3 +12,21 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.11.11
+      # Comma-separated origins allowed to call the API (browser). Example:
+      # https://soma-frontend.onrender.com,https://yourdomain.com
+      - key: CORS_ORIGINS
+        sync: false
+
+  # Next.js UI — set NEXT_PUBLIC_API_URL to your backend’s public URL + /api
+  # e.g. https://soma-backend.onrender.com/api
+  - type: web
+    name: soma-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npx next start -H 0.0.0.0 -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

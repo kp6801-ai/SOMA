@@ -9,7 +9,7 @@ import SessionQueue from '@/components/SessionQueue'
 import FrequencyVisualizer from '@/components/FrequencyVisualizer'
 import BpmKnob from '@/components/BpmKnob'
 
-type View = 'home' | 'session'
+type View = 'discover' | 'journey' | 'laboratory' | 'library'
 
 const ARC_SHAPES: Record<string, number[]> = {
   peak_hour:  [0.35, 0.48, 0.62, 0.75, 0.88, 0.97, 1.00, 1.00, 1.00, 0.92],
@@ -22,13 +22,13 @@ const ARC_SHAPES: Record<string, number[]> = {
 }
 
 const ARC_ACCENT: Record<string, string> = {
-  peak_hour:  '#e8305a',
-  workout:    '#ff6b35',
-  deep_focus: '#4488ff',
-  sleep:      '#9966dd',
-  meditate:   '#0fd4b8',
-  recovery:   '#44cc88',
-  hiit:       '#ffaa22',
+  peak_hour:  '#cafd00',
+  workout:    '#00eefc',
+  deep_focus: '#00eefc',
+  sleep:      '#ffeea5',
+  meditate:   '#00eefc',
+  recovery:   '#00eefc',
+  hiit:       '#ffeea5',
 }
 
 function MiniArc({ arcKey, color, active }: { arcKey: string; color: string; active: boolean }) {
@@ -65,8 +65,84 @@ function StarIcon({ filled, color }: { filled: boolean; color: string }) {
   )
 }
 
+type NavItemKey = View
+const NAV_ITEMS: Array<{ key: NavItemKey; label: string; icon: string }> = [
+  { key: 'discover', label: 'Discover', icon: 'explore' },
+  { key: 'laboratory', label: 'Laboratory', icon: 'science' },
+  { key: 'journey', label: 'Journey', icon: 'show_chart' },
+  { key: 'library', label: 'Library', icon: 'library_music' },
+]
+
+function TopBar({ view, progressText }: { view: View; progressText?: string }) {
+  return (
+    <div className="soma-topbar" role="banner">
+      <div className="soma-brand">
+        <span
+          className="material-symbols-outlined"
+          style={{ fontSize: 22, color: 'rgba(243,255,202,0.95)' }}
+        >
+          sensors
+        </span>
+        <div className="soma-brand-title">SOMA</div>
+      </div>
+      <div className="soma-topbar-spacer" />
+      {progressText && (
+        <span
+          className="tabular-nums"
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.58)',
+            fontWeight: 800,
+            fontFamily: 'Space Grotesk, sans-serif',
+            paddingRight: 6,
+          }}
+        >
+          {progressText}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function BottomNav({ activeView, onChange }: { activeView: View; onChange: (v: View) => void }) {
+  return (
+    <nav className="soma-bottomnav" role="navigation" aria-label="Primary">
+      {NAV_ITEMS.map(item => {
+        const active = item.key === activeView
+        return (
+          <button
+            key={item.key}
+            className={`soma-bottomnav-item ${active ? 'soma-bottomnav-item-active' : ''}`}
+            onClick={() => onChange(item.key)}
+            aria-current={active ? 'page' : undefined}
+            aria-label={item.label}
+            style={{ border: 0 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 22 }}>
+              {item.icon}
+            </span>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                fontFamily: 'Space Grotesk, sans-serif',
+              }}
+            >
+              {item.label}
+            </span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
 export default function SomaDashboard() {
-  const [view, setView]               = useState<View>('home')
+  const [view, setView]               = useState<View>('discover')
   const [arcTypes, setArcTypes]       = useState<ArcType[]>([])
   const [selectedArc, setSelectedArc] = useState<string>('')
   const [duration, setDuration]       = useState(60)
@@ -93,7 +169,7 @@ export default function SomaDashboard() {
     setError(null)
     try {
       const s = await api.createSession(selectedArc, duration)
-      setSession(s); setDone(false); setView('session')
+      setSession(s); setDone(false); setView('journey')
       await loadNextTrack(s.session_id)
     } catch {
       setError('Failed to create session. Make sure the backend is running and the database has tracks.')
@@ -123,15 +199,16 @@ export default function SomaDashboard() {
   }
 
   const currentPosition = nowPlaying?.position ?? 0
-  const homeAccent      = ARC_ACCENT[selectedArc]             || '#e8305a'
-  const sessionAccent   = ARC_ACCENT[session?.arc_type || ''] || '#e8305a'
+  const homeAccent      = ARC_ACCENT[selectedArc]             || '#cafd00'
+  const sessionAccent   = ARC_ACCENT[session?.arc_type || ''] || '#cafd00'
   const totalTracks     = session?.total_tracks ?? 0
   const progressPct     = totalTracks > 0 ? (currentPosition / totalTracks) * 100 : 0
 
   /* ─── HOME ──────────────────────────────────────────────── */
-  if (view === 'home') {
+  if (view === 'discover') {
     return (
-      <div style={{ position: 'relative', height: '100dvh', display: 'flex', flexDirection: 'column', zIndex: 10, overflow: 'hidden' }}>
+      <div style={{ position: 'relative', minHeight: '100vh', paddingTop: 70, paddingBottom: 90, display: 'flex', flexDirection: 'column', zIndex: 10, overflow: 'hidden' }}>
+        <TopBar view={view} />
         <div className="orb orb-pink" />
         <div className="orb orb-teal" />
         <div className="orb orb-blue" />
@@ -172,9 +249,9 @@ export default function SomaDashboard() {
           {error && (
             <div className="glass-card fade-up" style={{
               width: '100%', padding: '14px 18px',
-              borderColor: 'rgba(232,48,90,0.35)', marginBottom: 20,
+              borderColor: 'rgba(213,61,24,0.35)', marginBottom: 20,
             }}>
-              <p style={{ fontSize: 12, color: '#e8305a', lineHeight: 1.55 }}>{error}</p>
+              <p style={{ fontSize: 12, color: 'var(--error-dim)', lineHeight: 1.55 }}>{error}</p>
             </div>
           )}
 
@@ -188,7 +265,7 @@ export default function SomaDashboard() {
                   <div key={i} className="skeleton" style={{ height: 58, borderRadius: 16 }} />
                 ))}
                 {arcTypes.map(arc => {
-                  const color  = ARC_ACCENT[arc.key] || '#e8305a'
+                  const color  = ARC_ACCENT[arc.key] || '#cafd00'
                   const active = selectedArc === arc.key
                   return (
                     <button
@@ -218,7 +295,7 @@ export default function SomaDashboard() {
                         </span>
                         <p style={{
                           fontSize: 10, color: 'rgba(255,255,255,0.26)',
-                          fontFamily: 'DM Sans', fontWeight: 300,
+                          fontFamily: 'Inter', fontWeight: 300,
                           overflow: 'hidden', textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap', lineHeight: 1.4,
                         }}>
@@ -291,13 +368,58 @@ export default function SomaDashboard() {
             </button>
           </div>
         </div>
+        <BottomNav activeView={view} onChange={setView} />
       </div>
     )
   }
 
   /* ─── SESSION ────────────────────────────────────────────── */
+  if (view === 'laboratory') {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', paddingTop: 70, paddingBottom: 90, zIndex: 10 }}>
+        <TopBar view={view} />
+        <div className="fade-in" style={{ maxWidth: 1020, margin: '0 auto', padding: '20px 14px 0' }}>
+          <div className="glass-card soma-surface-highest" style={{ padding: '22px 18px' }}>
+            <p className="label-dim" style={{ marginBottom: 10 }}>Laboratory</p>
+            <h2 className="heading-display" style={{ fontSize: 18, color: 'rgba(243,255,202,0.95)' }}>
+              UI is in draft
+            </h2>
+            <p className="label-dim" style={{ marginTop: 8, opacity: 0.75 }}>
+              Stitch includes a lab bench layout. We can wire this to real track analysis next.
+            </p>
+          </div>
+        </div>
+        <BottomNav activeView={view} onChange={setView} />
+      </div>
+    )
+  }
+
+  if (view === 'library') {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', paddingTop: 70, paddingBottom: 90, zIndex: 10 }}>
+        <TopBar view={view} />
+        <div className="fade-in" style={{ maxWidth: 1020, margin: '0 auto', padding: '20px 14px 0' }}>
+          <div className="glass-card soma-surface-highest" style={{ padding: '22px 18px' }}>
+            <p className="label-dim" style={{ marginBottom: 10 }}>Library</p>
+            <h2 className="heading-display" style={{ fontSize: 18, color: 'rgba(243,255,202,0.95)' }}>
+              UI is in draft
+            </h2>
+            <p className="label-dim" style={{ marginTop: 8, opacity: 0.75 }}>
+              Stitch shows track detail/player preview. We can add this screen when you share the desired flow.
+            </p>
+          </div>
+        </div>
+        <BottomNav activeView={view} onChange={setView} />
+      </div>
+    )
+  }
+
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', zIndex: 10 }}>
+    <div style={{ position: 'relative', minHeight: '100vh', paddingTop: 70, paddingBottom: 90, zIndex: 10 }}>
+      <TopBar
+        view={view}
+        progressText={totalTracks > 0 ? `${currentPosition}/${totalTracks}` : undefined}
+      />
       <div className="orb orb-pink" style={{ opacity: 0.22 }} />
       <div className="orb orb-teal" style={{ opacity: 0.14 }} />
 
@@ -305,15 +427,15 @@ export default function SomaDashboard() {
 
         {/* Error */}
         {error && (
-          <div className="glass-card" style={{ padding: '12px 16px', borderColor: 'rgba(232,48,90,0.35)', marginBottom: 14 }}>
-            <p style={{ fontSize: 12, color: '#e8305a' }}>{error}</p>
+          <div className="glass-card" style={{ padding: '12px 16px', borderColor: 'rgba(213,61,24,0.35)', marginBottom: 14 }}>
+            <p style={{ fontSize: 12, color: 'var(--error-dim)' }}>{error}</p>
           </div>
         )}
 
         {/* Top bar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'none' }}>
           <button
-            onClick={() => setView('home')}
+            onClick={() => setView('discover')}
             className="label-mid"
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
@@ -383,7 +505,7 @@ export default function SomaDashboard() {
                 </p>
                 <p className="label-dim" style={{ marginBottom: 40 }}>Your set has ended.</p>
                 <button
-                  onClick={() => { setView('home'); setSession(null); setNowPlaying(null); setDone(false) }}
+                  onClick={() => { setView('discover'); setSession(null); setNowPlaying(null); setDone(false) }}
                   className="heading-display"
                   style={{
                     fontSize: 10, letterSpacing: '0.24em',
@@ -428,14 +550,16 @@ export default function SomaDashboard() {
                     >
                       {nowPlaying.title}
                     </h2>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.34)', fontFamily: 'DM Sans', fontWeight: 300, letterSpacing: '0.02em' }}>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.34)', fontFamily: 'Inter', fontWeight: 300, letterSpacing: '0.02em' }}>
                       {nowPlaying.artist}
                     </p>
 
                     {/* Target BPM badge */}
                     <div style={{ marginTop: 12 }}>
                       <span style={{
-                        fontFamily: 'Share Tech Mono, monospace', fontSize: 10,
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                        fontVariantNumeric: 'tabular-nums',
+                        fontSize: 10,
                         padding: '4px 10px', borderRadius: 8,
                         background: `${sessionAccent}0d`, border: `1px solid ${sessionAccent}25`,
                         color: sessionAccent,
@@ -478,6 +602,7 @@ export default function SomaDashboard() {
                     onEnded={() => handleEvent('completed')}
                     audioRef={audioRef}
                     onPlayingChange={setIsPlaying}
+                    accentColor={sessionAccent}
                   />
                 </div>
 
@@ -491,7 +616,7 @@ export default function SomaDashboard() {
                       background: 'rgba(255,255,255,0.04)',
                       border: '1px solid rgba(255,255,255,0.07)',
                       fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
-                      fontFamily: 'DM Sans', cursor: 'pointer', flexShrink: 0,
+                      fontFamily: 'Inter', cursor: 'pointer', flexShrink: 0,
                       transition: 'background 0.18s ease',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
@@ -529,7 +654,23 @@ export default function SomaDashboard() {
                   </div>
                 )}
               </div>
-            ) : null}
+            ) : (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <p className="heading-display" style={{ fontSize: 16, color: 'rgba(243,255,202,0.95)', letterSpacing: '0.2em', marginBottom: 8 }}>
+                  No active session
+                </p>
+                <p className="label-dim" style={{ opacity: 0.75, marginBottom: 22 }}>
+                  Start a session from Discover to begin the journey.
+                </p>
+                <button
+                  onClick={() => setView('discover')}
+                  className="soma-btn-ghost"
+                  style={{ margin: '0 auto', display: 'inline-block' }}
+                >
+                  Go to Discover
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── RIGHT: Context sidebar ── */}
@@ -544,7 +685,12 @@ export default function SomaDashboard() {
               {/* BPM Arc */}
               <div className="glass-card" style={{ padding: '18px 20px' }}>
                 <p className="label-dim" style={{ marginBottom: 12 }}>BPM Arc</p>
-                <EnergyArc tracks={session.tracks} currentPosition={currentPosition} />
+                <EnergyArc
+                  tracks={session.tracks}
+                  currentPosition={currentPosition}
+                  highColor={sessionAccent}
+                  lowColor="#00eefc"
+                />
                 <div className="soma-divider" style={{ margin: '12px 0 10px' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   {[
@@ -564,6 +710,7 @@ export default function SomaDashboard() {
           )}
         </div>
       </div>
+      <BottomNav activeView={view} onChange={setView} />
     </div>
   )
 }
