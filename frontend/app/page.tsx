@@ -1055,7 +1055,7 @@ export default function SomaDashboard() {
     const style = document.createElement('style')
     style.textContent = `@media (min-width: 768px) { .md-topbar { display: flex !important; } }`
     document.head.appendChild(style)
-    return () => document.head.removeChild(style)
+    return () => { document.head.removeChild(style) }
   }, [])
 
   const startSession = async () => {
