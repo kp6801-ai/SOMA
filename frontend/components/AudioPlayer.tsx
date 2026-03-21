@@ -49,16 +49,18 @@ export default function AudioPlayer({
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
-    if (audioUrl) {
-      audio.load()
-      audio.play()
-        .then(() => { setPlayState(true); setAutoplayBlocked(false) })
-        .catch(() => { setPlayState(false); setAutoplayBlocked(true) })
-    } else {
+    if (!audioUrl) {
       audio.pause()
       setPlayState(false)
       setProgress(0)
+      setDuration(0)
       setAutoplayBlocked(false)
+    } else {
+      // Reset state for new track — don't autoplay (Chrome blocks non-gesture load)
+      setPlayState(false)
+      setProgress(0)
+      setDuration(0)
+      setAutoplayBlocked(true) // Show "Tap ▶" immediately
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl])
@@ -87,6 +89,10 @@ export default function AudioPlayer({
       audio.pause()
       setPlayState(false)
     } else {
+      // Load first if not yet loaded (Chrome requires user gesture for load+play)
+      if (audio.readyState === 0) {
+        audio.load()
+      }
       audio.play()
         .then(() => { setPlayState(true); setAutoplayBlocked(false) })
         .catch(() => setPlayState(false))
