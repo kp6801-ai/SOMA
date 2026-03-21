@@ -1,4 +1,6 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+const BASE = typeof window === 'undefined'
+  ? (process.env.API_URL || 'http://localhost:8000/api')
+  : '/api'
 
 export interface ArcType {
   key: string
