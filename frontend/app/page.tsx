@@ -556,6 +556,7 @@ function JourneyView({ session, nowPlaying, scanning, done, error, isPlaying, ho
                   onEnded={() => onEvent('completed')}
                   audioRef={audioRef}
                   onPlayingChange={onSetIsPlaying}
+                  accentColor="#cafd00"
                 />
               </div>
 

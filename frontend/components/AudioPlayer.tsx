@@ -9,9 +9,30 @@ interface Props {
   audioRef?: React.RefObject<HTMLAudioElement | null>
   /** Called whenever play/pause state changes */
   onPlayingChange?: (playing: boolean) => void
+  /** Accent color for progress/controls */
+  accentColor: string
 }
 
-export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, onPlayingChange }: Props) {
+function parseColor(color: string): [number, number, number] {
+  const hex = color.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  if (hex) return [parseInt(hex[1], 16), parseInt(hex[2], 16), parseInt(hex[3], 16)]
+  const rgb = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
+  if (rgb) return [parseInt(rgb[1]), parseInt(rgb[2]), parseInt(rgb[3])]
+  return [255, 255, 255]
+}
+
+function rgba(color: string, alpha: number) {
+  const [r, g, b] = parseColor(color)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+export default function AudioPlayer({
+  audioUrl,
+  onEnded,
+  audioRef: externalRef,
+  onPlayingChange,
+  accentColor,
+}: Props) {
   const internalRef = useRef<HTMLAudioElement>(null)
   const audioRef = externalRef ?? internalRef
 
@@ -90,8 +111,8 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
         <div style={{
           position: 'absolute', left: 0, top: 0, height: '100%',
           width: `${pct}%`,
-          background: 'linear-gradient(90deg, #cafd00, #a8d400)',
-          boxShadow: '0 0 8px rgba(202,253,0,0.5)',
+          background: `linear-gradient(90deg, ${rgba(accentColor, 0.95)}, ${rgba(accentColor, 0.65)})`,
+          boxShadow: `0 0 8px ${rgba(accentColor, 0.55)}`,
           borderRadius: 2,
           transition: 'width 0.5s linear',
         }} />
@@ -99,9 +120,9 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
           position: 'absolute', top: '50%',
           left: `${pct}%`,
           transform: 'translate(-50%, -50%)',
-          width: 8, height: 8, borderRadius: 1,
-          background: '#cafd00',
-          boxShadow: '0 0 6px rgba(202,253,0,0.7)',
+          width: 10, height: 10, borderRadius: '50%',
+          background: accentColor,
+          boxShadow: `0 0 6px ${rgba(accentColor, 0.75)}`,
         }} />
       </div>
 
@@ -115,8 +136,8 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
           style={{
             width: 40, height: 40, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: audioUrl ? 'rgba(202,253,0,0.10)' : 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(202,253,0,0.20)',
+            background: audioUrl ? rgba(accentColor, 0.16) : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${rgba(accentColor, 0.32)}`,
             cursor: audioUrl ? 'pointer' : 'not-allowed',
             transition: 'background 0.2s ease',
           }}
@@ -137,7 +158,7 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
       </div>
 
       {autoplayBlocked && !playing && audioUrl && (
-        <p className="label-dim" style={{ textAlign: 'center', color: '#ffaa22', opacity: 0.8 }}>
+        <p className="label-dim" style={{ textAlign: 'center', color: accentColor, opacity: 0.85 }}>
           Tap ▶ to start playback
         </p>
       )}

@@ -6,9 +6,24 @@ import { SessionTrack } from '@/lib/api'
 interface Props {
   tracks: SessionTrack[]
   currentPosition: number
+  lowColor?: string
+  highColor: string
 }
 
-export default function EnergyArc({ tracks, currentPosition }: Props) {
+function parseColor(color: string): [number, number, number] {
+  const hex = color.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  if (hex) return [parseInt(hex[1], 16), parseInt(hex[2], 16), parseInt(hex[3], 16)]
+  const rgb = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
+  if (rgb) return [parseInt(rgb[1]), parseInt(rgb[2]), parseInt(rgb[3])]
+  return [255, 255, 255]
+}
+
+function rgba(color: string, alpha: number) {
+  const [r, g, b] = parseColor(color)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+export default function EnergyArc({ tracks, currentPosition, lowColor = '#00eefc', highColor }: Props) {
   const svgRef = useRef<SVGPolylineElement>(null)
 
   const W = 600
@@ -48,9 +63,9 @@ export default function EnergyArc({ tracks, currentPosition }: Props) {
       >
         <defs>
           <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#2244cc" />
-            <stop offset="50%" stopColor="#e8305a" />
-            <stop offset="100%" stopColor="#c0195e" />
+            <stop offset="0%" stopColor={lowColor} stopOpacity={0.55} />
+            <stop offset="55%" stopColor={highColor} stopOpacity={0.9} />
+            <stop offset="100%" stopColor={highColor} stopOpacity={0.75} />
           </linearGradient>
           <filter id="waveGlow">
             <feGaussianBlur stdDeviation="2" result="blur" />
@@ -91,11 +106,11 @@ export default function EnergyArc({ tracks, currentPosition }: Props) {
             <circle
               key={t.position}
               cx={x} cy={y} r={isCurrent ? 5 : 3}
-              fill={isCurrent ? '#e8305a' : isPast ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)'}
-              stroke={isCurrent ? '#e8305a' : 'none'}
+              fill={isCurrent ? highColor : isPast ? rgba(highColor, 0.35) : 'rgba(255,255,255,0.15)'}
+              stroke={isCurrent ? highColor : 'none'}
               strokeWidth={isCurrent ? 2 : 0}
               style={{
-                filter: isCurrent ? 'drop-shadow(0 0 6px #e8305a)' : 'none',
+                filter: isCurrent ? `drop-shadow(0 0 6px ${rgba(highColor, 0.95)})` : 'none',
                 transition: 'fill 0.3s ease',
               }}
             />
