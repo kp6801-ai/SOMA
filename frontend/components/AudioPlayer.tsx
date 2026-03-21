@@ -90,8 +90,8 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
         <div style={{
           position: 'absolute', left: 0, top: 0, height: '100%',
           width: `${pct}%`,
-          background: 'linear-gradient(90deg, #e8305a, #c0195e)',
-          boxShadow: '0 0 8px rgba(232,48,90,0.6)',
+          background: 'linear-gradient(90deg, #cafd00, #a8d400)',
+          boxShadow: '0 0 8px rgba(202,253,0,0.5)',
           borderRadius: 2,
           transition: 'width 0.5s linear',
         }} />
@@ -99,9 +99,9 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
           position: 'absolute', top: '50%',
           left: `${pct}%`,
           transform: 'translate(-50%, -50%)',
-          width: 10, height: 10, borderRadius: '50%',
-          background: '#e8305a',
-          boxShadow: '0 0 6px #e8305a',
+          width: 8, height: 8, borderRadius: 1,
+          background: '#cafd00',
+          boxShadow: '0 0 6px rgba(202,253,0,0.7)',
         }} />
       </div>
 
@@ -115,8 +115,8 @@ export default function AudioPlayer({ audioUrl, onEnded, audioRef: externalRef, 
           style={{
             width: 40, height: 40, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: audioUrl ? 'rgba(232,48,90,0.15)' : 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(232,48,90,0.3)',
+            background: audioUrl ? 'rgba(202,253,0,0.10)' : 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(202,253,0,0.20)',
             cursor: audioUrl ? 'pointer' : 'not-allowed',
             transition: 'background 0.2s ease',
           }}

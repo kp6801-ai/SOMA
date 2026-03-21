@@ -193,7 +193,7 @@ export default function BpmKnob({ bpm, targetBpm, color }: Props) {
           y={CENTER + 5}
           textAnchor="middle"
           dominantBaseline="middle"
-          fontFamily="'Share Tech Mono', 'Courier New', monospace"
+          fontFamily="'Space Grotesk', sans-serif"
           fontSize="18"
           fontWeight="600"
           fill="rgba(255,255,255,0.92)"
@@ -209,7 +209,7 @@ export default function BpmKnob({ bpm, targetBpm, color }: Props) {
           y={CENTER + 20}
           textAnchor="middle"
           dominantBaseline="middle"
-          fontFamily="'Share Tech Mono', 'Courier New', monospace"
+          fontFamily="'Space Grotesk', sans-serif"
           fontSize="8"
           fill="rgba(255,255,255,0.35)"
           letterSpacing="2"
