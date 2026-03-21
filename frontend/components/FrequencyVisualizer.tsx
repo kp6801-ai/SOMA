@@ -24,24 +24,22 @@ export default function FrequencyVisualizer({ audioRef, playing, color }: Props)
   const rafRef      = useRef<number | null>(null)
   const decayRef    = useRef<Float32Array | null>(null)
 
-  // ── Set up Web Audio graph (runs when playing first becomes true) ──────────
+  // ── Set up Web Audio graph once (on mount) — never tear down mid-session ──
+  // createMediaElementSource permanently captures the audio element; closing
+  // the AudioContext makes it silent forever. We set up once and only
+  // suspend/resume based on playing state.
   useEffect(() => {
-    if (!playing) return
     const audio = audioRef.current
     if (!audio) return
-    if (ctxRef.current) {
-      // Already set up — just resume if suspended
-      if (ctxRef.current.state === 'suspended') ctxRef.current.resume().catch(() => {})
-      return
-    }
 
     const AudioCtx =
       window.AudioContext ||
       (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioCtx) return
 
+    let ctx: AudioContext
     try {
-      const ctx      = new AudioCtx()
+      ctx            = new AudioCtx()
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 512
       analyser.smoothingTimeConstant = 0.82
@@ -54,22 +52,27 @@ export default function FrequencyVisualizer({ audioRef, playing, color }: Props)
       analyserRef.current = analyser
       sourceRef.current   = source
       decayRef.current    = new Float32Array(analyser.frequencyBinCount)
-
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
     } catch (e) {
       console.warn('FrequencyVisualizer setup failed:', e)
     }
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      try {
-        sourceRef.current?.disconnect()
-        analyserRef.current?.disconnect()
-        ctxRef.current?.close()
-      } catch {}
+      try { ctxRef.current?.close() } catch {}
       ctxRef.current = analyserRef.current = sourceRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Resume/suspend AudioContext based on playing state ─────────────────────
+  useEffect(() => {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    if (playing) {
+      ctx.resume().catch(() => {})
+    } else {
+      ctx.suspend().catch(() => {})
+    }
   }, [playing])
 
   // ── Draw loop ──────────────────────────────────────────────────────────────
