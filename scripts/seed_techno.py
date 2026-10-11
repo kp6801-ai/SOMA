@@ -1,3 +1,4 @@
+import os
 import requests
 import psycopg2
 import psycopg2.extras
@@ -8,7 +9,7 @@ DB_URL = "postgresql://localhost/soma"
 # FMA genre IDs for techno/electronic
 GENRE_IDS = [15, 38]  # 15=Techno, 38=Electronic
 FMA_API = "https://freemusicarchive.org/api/get/tracks.json"
-API_KEY = "60BLHNQCAOUFPIBZ"
+API_KEY = os.environ["FMA_API_KEY"]
 
 def fetch_fma_tracks(genre_id, page=1, limit=50):
     params = {"api_key": API_KEY, "genre_id": genre_id, "limit": limit, "page": page}
