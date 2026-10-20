@@ -38,3 +38,7 @@ yarn-error.log*
 
 # Render / deployment
 render.yaml.local
+.vercel
+
+# junk (security audit 2026-10-21)
+.DS_Store
